@@ -1,0 +1,53 @@
+{
+  "name": "irion-api",
+  "version": "0.1.0",
+  "description": "Irion B2B Neobank API — Fastify REST server",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "openapi:generate": "tsx src/openapi.ts > openapi.yaml",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "lint": "eslint src",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@algorandfoundation/algokit-utils": "^9.0.0",
+    "@fastify/cors": "^9.0.0",
+    "@fastify/helmet": "^11.0.0",
+    "@fastify/jwt": "^8.0.0",
+    "@fastify/rate-limit": "^9.0.0",
+    "@fastify/swagger": "^8.0.0",
+    "@fastify/swagger-ui": "^4.0.0",
+    "@sentry/node": "^8.0.0",
+    "@sentry/profiling-node": "^8.0.0",
+    "@upstash/redis": "^1.28.0",
+    "algosdk": "^3.0.0",
+    "bullmq": "^5.0.0",
+    "drizzle-orm": "^0.30.0",
+    "fastify": "^4.27.0",
+    "fastify-plugin": "^4.5.0",
+    "jose": "^5.0.0",
+    "pg": "^8.11.0",
+    "postgres": "^3.4.0",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/uuid": "^10.0.0",
+    "drizzle-kit": "^0.21.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}
