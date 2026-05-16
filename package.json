@@ -30,6 +30,7 @@
     "@upstash/redis": "^1.28.0",
     "algosdk": "^3.0.0",
     "bullmq": "^5.0.0",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.30.0",
     "fastify": "^4.27.0",
     "fastify-plugin": "^4.5.0",
