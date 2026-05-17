@@ -411,13 +411,17 @@ export const idempotencyKeys = pgTable(
       .notNull()
       .references(() => institutions.id),
     requestPath: varchar("request_path", { length: 255 }).notNull(),
+    requestMethod: varchar("request_method", { length: 10 }).notNull(),
+    requestBodyHash: varchar("request_body_hash", { length: 64 }).notNull(),
     responseBody: jsonb("response_body"),
-    responseStatus: integer("response_status"),
+    responseStatus: integer("response_status").notNull(),
+    responseHeaders: jsonb("response_headers"),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => ({
     expiresAtIdx: index("idx_idempotency_expires_at").on(table.expiresAt),
+    instPathIdx: index("idx_idempotency_inst_path").on(table.institutionId, table.requestPath),
   })
 );
 
