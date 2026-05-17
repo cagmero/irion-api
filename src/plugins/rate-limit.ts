@@ -6,11 +6,6 @@ import { db } from "../db/index.js";
 import { apiKeys } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 
-const REDIS = new Redis({
-  url: getSecret("UPSTASH_REDIS_REST_URL"),
-  token: getSecret("UPSTASH_REDIS_REST_TOKEN"),
-});
-
 const PUBLIC_ROUTES = new Set(["/health", "/v1/auth/token"]);
 const PUBLIC_RATE_LIMIT = 1000;
 const AUTH_RATE_LIMIT = 500;
@@ -19,6 +14,17 @@ const RATE_LIMIT_WINDOW_SEC = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
 const CACHE_TTL_MS = 60_000;
 
 const tierCache = new Map<string, { limit: number; expiresAt: number }>();
+let redisClient: Redis | null = null;
+
+function getRedis(): Redis {
+  if (!redisClient) {
+    redisClient = new Redis({
+      url: getSecret("UPSTASH_REDIS_REST_URL"),
+      token: getSecret("UPSTASH_REDIS_REST_TOKEN"),
+    });
+  }
+  return redisClient;
+}
 
 function getClientIp(request: FastifyRequest): string {
   return (
@@ -51,13 +57,17 @@ async function rateLimitRequest(request: FastifyRequest, reply: FastifyReply): P
     ? `ratelimit:ip:${getClientIp(request)}`
     : `ratelimit:institution:${request.institutionId ?? "unknown"}`;
 
-  const limit = isPublicRoute ? PUBLIC_RATE_LIMIT : await getRateLimitForInstitution(request.institutionId ?? "");
+  // For non-public routes, only check DB-based rate limits if institutionId is set
+  const institutionId = request.institutionId;
+  const limit = isPublicRoute || !institutionId
+    ? PUBLIC_RATE_LIMIT
+    : await getRateLimitForInstitution(institutionId);
 
   if (!limit) return;
 
-  const current = await REDIS.incr(key);
+  const current = await getRedis().incr(key);
   if (current === 1) {
-    await REDIS.expire(key, RATE_LIMIT_WINDOW_SEC);
+    await getRedis().expire(key, RATE_LIMIT_WINDOW_SEC);
   }
 
   const remaining = Math.max(0, limit - current);
