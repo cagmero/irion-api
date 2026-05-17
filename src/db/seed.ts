@@ -126,7 +126,7 @@ async function run() {
     ltvRatioBps: 5000,
     termDays: 90,
     installmentsPaid: 0,
-    onchainLoanId: BigInt(1),
+    onchainLoanId: 1,
     nextPaymentDueAt: thirtyDaysFromNow,
     originatedAt: now,
     maturesAt: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),

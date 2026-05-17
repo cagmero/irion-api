@@ -2,19 +2,16 @@ import fp from "fastify-plugin";
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import fastifyJwt from "@fastify/jwt";
 import crypto from "crypto";
+import { Readable } from "node:stream";
 import { getSecret } from "../lib/secrets.js";
 import { problemDetails } from "../lib/errors.js";
 import { db } from "../db/index.js";
 import { apiKeys } from "../db/schema.js";
 import { eq, and } from "drizzle-orm";
-import { InferInsertModel } from "drizzle-orm";
 
-const JWT_SECRET = getSecret("JWT_SECRET");
 const JWT_ISSUER = "irion-api";
 const JWT_AUDIENCE = "irion-api-v1";
 const HMAC_CACHE_TTL_MS = 60_000;
-
-type ApiKeyRow = InferInsertModel<typeof apiKeys>;
 
 const hmacSecretCache = new Map<string, { secret: Buffer; expiresAt: number }>();
 
@@ -58,26 +55,30 @@ interface JwtPayload {
   exp: number;
 }
 
-export async function authPlugin(app: FastifyInstance) {
+export default fp(async function authPlugin(app: FastifyInstance) {
   const masterKey = getSecret("WEBHOOK_SIGNING_SECRET");
+  const jwtSecret = getSecret("JWT_SECRET");
 
-  app.addHook("preParsing", async (request) => {
-    if (["POST", "PUT", "PATCH"].includes(request.method)) {
-      const chunks: Buffer[] = [];
-      for await (const chunk of request.raw) {
-        chunks.push(Buffer.from(chunk));
-      }
-      request.rawBody = Buffer.concat(chunks);
+  app.addHook("preParsing", async (request: FastifyRequest, _reply: FastifyReply, payload: NodeJS.ReadableStream) => {
+    if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return payload;
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of payload) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
+    request.rawBody = Buffer.concat(chunks);
+
+    return Readable.from(request.rawBody);
   });
 
   await app.register(fastifyJwt, {
-    secret: JWT_SECRET,
+    secret: jwtSecret,
     sign: {
       iss: JWT_ISSUER,
       aud: JWT_AUDIENCE,
     },
     verify: {
+      algorithms: ["HS256"],
       allowedIss: [JWT_ISSUER],
       allowedAud: [JWT_AUDIENCE],
     },
@@ -163,7 +164,7 @@ export async function authPlugin(app: FastifyInstance) {
       return reply.status(401).send(problemDetails(request, "AUTH_FAILED"));
     }
   });
-}
+});
 
 declare module "fastify" {
   export interface FastifyInstance {
@@ -172,6 +173,5 @@ declare module "fastify" {
   export interface FastifyRequest {
     institutionId: string;
     apiKeyId: string;
-    rawBody?: Buffer;
   }
 }

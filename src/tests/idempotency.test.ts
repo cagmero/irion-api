@@ -7,7 +7,8 @@ const JWT_SECRET = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdead
 const JWT_ISSUER = "irion-api";
 const JWT_AUDIENCE = "irion-api-v1";
 
-const mockRedis = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockRedis: any = {
   _cache: {} as Record<string, unknown>,
   get: vi.fn((key: string) => Promise.resolve(mockRedis._cache[key] ?? null)),
   set: vi.fn((key: string, value: string, _opts?: unknown) => {
