@@ -58,13 +58,16 @@ export const apiKeys = pgTable(
       .notNull()
       .references(() => institutions.id),
     keyPrefix: varchar("key_prefix", { length: 32 }).notNull(),
-    keyHash: varchar("key_hash", { length: 255 }).notNull(), // argon2id
+    keyHash: varchar("key_hash", { length: 255 }).notNull(),
+    hmacSecret: bytea("hmac_secret"),
+    allowedIps: text("allowed_ips").array(),
     status: apiKeyStatusEnum("status").notNull().default("active"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     prefixIdx: index("idx_api_keys_prefix").on(table.keyPrefix),
+    allowedIpsIdx: index("idx_api_keys_allowed_ips").on(table.allowedIps),
   })
 );
 
