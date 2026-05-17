@@ -74,37 +74,40 @@ export default fp(async function idempotencyPlugin(app: FastifyInstance) {
 
     const redis = getRedis();
 
-    const tryClaim = async (): Promise<CachedIdempotency | null> => {
-      const result = await redis.set(cacheKey, JSON.stringify({
-        status: 0,
-        body: null,
-        bodyHash: currentBodyHash,
-        inProgress: true,
-      }), {
-        nx: true,
-        ex: IDEMPOTENCY_TTL_SECONDS,
-      });
+    // Try to claim the key atomically with SET NX EX
+    const claimResult = await redis.set(cacheKey, JSON.stringify({
+      status: 0,
+      body: null,
+      bodyHash: currentBodyHash,
+      inProgress: true,
+    }), {
+      nx: true,
+      ex: IDEMPOTENCY_TTL_SECONDS,
+    });
 
-      if (result === "OK") {
-        return null;
+    if (claimResult !== "OK") {
+      // Another request holds the lock - check if it's in progress or completed
+      const existing = await redis.get<CachedIdempotency>(cacheKey);
+      
+      if (!existing || (existing as any).inProgress) {
+        // Still in progress - return 409
+        return reply
+          .status(409)
+          .header("Retry-After", "1")
+          .send(problemDetails(request, "IDEMPOTENCY_IN_PROGRESS", "Another request with this idempotency key is in progress. Retry after 1 second."));
       }
 
-      const existing = await redis.get<CachedIdempotency>(cacheKey);
-      return existing ?? null;
-    };
-
-    const cached = await tryClaim();
-
-    if (cached) {
-      if (!cached.bodyHash || !constantTimeEqual(cached.bodyHash, currentBodyHash)) {
+      // Winner completed - check body hash
+      if (!existing.bodyHash || !constantTimeEqual(existing.bodyHash, currentBodyHash)) {
         return reply.status(422).send(
           problemDetails(request, "IDEMPOTENCY_MISMATCH", "Idempotency key reused with different request body")
         );
       }
 
-      const storedHeaders = cached.headers ?? {};
+      // Replay winner's response
+      const storedHeaders = existing.headers ?? {};
       reply
-        .status(cached.status)
+        .status(existing.status)
         .header("X-Idempotent-Response", "true");
 
       for (const [k, v] of Object.entries(storedHeaders)) {
@@ -113,8 +116,10 @@ export default fp(async function idempotencyPlugin(app: FastifyInstance) {
         }
       }
 
-      return reply.send(cached.body ?? null);
+      return reply.send(existing.body ?? null);
     }
+
+    // We claimed the key - we're the winner, proceed with request
 
     let capturedStatus = 0;
     let capturedBody: unknown = null;
