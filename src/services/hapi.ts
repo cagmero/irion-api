@@ -1,25 +1,22 @@
-export class HapiService {
-  /**
-   * STUBBED: Screen an Algorand address using Hapi protocol.
-   * Returns a mock risk score for MVP.
-   */
-  async getRiskScore(address: string): Promise<{ riskScore: number; isHighRisk: boolean; details: any }> {
-    // Mock network call
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    // Stub implementation: deterministic based on address string length (just for testing)
-    const riskScore = address.length % 2 === 0 ? 10 : 85;
-    
-    return {
-      riskScore,
-      isHighRisk: riskScore > 75,
-      details: {
-        lastChecked: new Date().toISOString(),
-        provider: "HAPI",
-        mocked: true
-      }
-    };
-  }
+// STUBBED: Hapi Protocol wallet screening not yet integrated.
+// See DEFERRED.md → "Wallet Screening Providers" for activation plan.
+
+export interface HapiScreenResult {
+  flagged: boolean;
+  riskScore: number;        // 0-1000
+  labels: string[];         // e.g. ["sanctioned", "exchange", "mixer"]
+  checkedAt: string;        // ISO 8601
 }
 
-export const hapiService = new HapiService();
+export async function screenWalletHapi(algorandAddress: string): Promise<HapiScreenResult> {
+  // STUBBED: returns clean result for any address not in the test denylist
+  const denylist = (process.env.HAPI_MOCK_DENYLIST ?? "").split(",").filter(Boolean);
+  const flagged = denylist.includes(algorandAddress);
+
+  return {
+    flagged,
+    riskScore: flagged ? 950 : 10,
+    labels: flagged ? ["mock_denylist"] : [],
+    checkedAt: new Date().toISOString(),
+  };
+}

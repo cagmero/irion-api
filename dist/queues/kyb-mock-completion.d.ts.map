@@ -1,0 +1,1 @@
+{"version":3,"file":"kyb-mock-completion.d.ts","sourceRoot":"","sources":["../../src/queues/kyb-mock-completion.ts"],"names":[],"mappings":"AACA,OAAO,EAAS,MAAM,EAAE,MAAM,QAAQ,CAAC;AAOvC,UAAU,oBAAoB;IAC5B,aAAa,EAAE,MAAM,CAAC;IACtB,cAAc,EAAE,MAAM,CAAC;IACvB,eAAe,EAAE,MAAM,CAAC;CACzB;AASD,wBAAsB,kBAAkB,uDAoFvC"}

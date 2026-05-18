@@ -4,3 +4,4 @@ import * as schema from "./schema";
 
 const queryClient = postgres(process.env.DATABASE_URL as string, { max: 10 });
 export const db = drizzle(queryClient, { schema });
+export const pool = queryClient;

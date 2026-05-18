@@ -11,6 +11,12 @@ import idempotencyPlugin from "./plugins/idempotency.js";
 import { registerRoutes } from "./routes/index.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
+  // Validate REDIS_URL at startup — required for BullMQ workers
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl || (!redisUrl.startsWith("redis://") && !redisUrl.startsWith("rediss://"))) {
+    throw new Error("REDIS_URL is missing or malformed. Must start with redis:// or rediss://");
+  }
+
   const app = fastify({
     logger: true,
   });

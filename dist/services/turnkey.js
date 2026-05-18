@@ -1,79 +1,193 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.turnkeyService = exports.TurnkeyService = void 0;
-const http_1 = require("@turnkey/http");
+exports.createSubOrganization = createSubOrganization;
+exports.createWallet = createWallet;
+exports.signTransaction = signTransaction;
+exports.deriveAlgorandAddress = deriveAlgorandAddress;
+/**
+ * Turnkey Service - Institutional Wallet Signing
+ *
+ * Provides wallet creation and transaction signing for Algorand
+ * Uses Turnkey for secure key management and signing operations
+ * SDK: @turnkey/sdk-server
+ */
+const sdk_server_1 = require("@turnkey/sdk-server");
 const api_key_stamper_1 = require("@turnkey/api-key-stamper");
-// Assuming we use standard Turnkey client
-// Make sure to install @turnkey/http @turnkey/api-key-stamper if not already installed.
-// We'll wrap it in a service class for dependency injection/easier testing
-class TurnkeyService {
-    client;
-    organizationId;
-    parentWalletId;
-    constructor() {
-        this.organizationId = process.env.TURNKEY_ORG_ID;
-        this.parentWalletId = process.env.TURNKEY_PARENT_WALLET_ID;
-        const stamper = new api_key_stamper_1.ApiKeyStamper({
-            apiPublicKey: process.env.TURNKEY_API_PUBLIC_KEY,
-            apiPrivateKey: process.env.TURNKEY_API_PRIVATE_KEY,
-        });
-        this.client = new http_1.TurnkeyClient({ baseUrl: process.env.TURNKEY_API_BASE_URL }, stamper);
-    }
-    /**
-     * Create a new sub-wallet for an institution
-     */
-    async createSubWallet(institutionName) {
-        const timestamp = Date.now();
-        const walletName = `Wallet - ${institutionName} - ${timestamp}`;
-        const response = await this.client.createWallet({
-            type: "ACTIVITY_TYPE_CREATE_WALLET",
-            timestampMs: String(Date.now()),
-            organizationId: this.organizationId,
-            parameters: {
-                walletName: walletName,
-                accounts: [
-                    {
-                        curve: "CURVE_ED25519", // Algorand uses ed25519
-                        pathFormat: "PATH_FORMAT_BIP32",
-                        path: "m/44'/283'/0'/0/0", // Algorand derivation path
-                        addressFormat: "ADDRESS_FORMAT_COMPRESSED",
-                    },
-                ],
-            },
-        });
-        const walletId = response.activity.result.createWalletResult?.walletId;
-        const address = response.activity.result.createWalletResult?.addresses?.[0];
-        if (!walletId || !address) {
-            throw new Error("Failed to extract wallet ID or address from Turnkey response");
+const algosdk_1 = __importDefault(require("algosdk"));
+const secrets_js_1 = require("../lib/secrets.js");
+const errors_js_1 = require("../lib/errors.js");
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [1000, 2000, 4000];
+function getConfig() {
+    return {
+        organizationId: (0, secrets_js_1.getSecret)("TURNKEY_ORG_ID"),
+        apiBaseUrl: (0, secrets_js_1.getSecret)("TURNKEY_API_BASE_URL"),
+        apiPublicKey: (0, secrets_js_1.getSecret)("TURNKEY_API_PUBLIC_KEY"),
+        apiPrivateKey: (0, secrets_js_1.getSecret)("TURNKEY_API_PRIVATE_KEY"),
+    };
+}
+function createClient() {
+    const config = getConfig();
+    const stamper = new api_key_stamper_1.ApiKeyStamper({
+        apiPublicKey: config.apiPublicKey,
+        apiPrivateKey: config.apiPrivateKey,
+    });
+    return new sdk_server_1.TurnkeyServerClient({
+        apiBaseUrl: config.apiBaseUrl,
+        organizationId: config.organizationId,
+        stamper,
+    });
+}
+async function withRetry(operation, fn) {
+    let lastError;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+            return await fn();
         }
-        return { walletId, address };
-    }
-    /**
-     * Sign a raw transaction payload (Algorand msgpack)
-     */
-    async signTransaction(walletId, address, unsignedPayload) {
-        const response = await this.client.signRawPayload({
-            type: "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2",
-            organizationId: this.organizationId,
-            timestampMs: String(Date.now()),
-            parameters: {
-                signWith: address,
-                payload: unsignedPayload.toString("hex"),
-                encoding: "PAYLOAD_ENCODING_HEXADECIMAL",
-                hashFunction: "HASH_FUNCTION_NOT_APPLICABLE", // For Algorand, we hash the msgpack locally before signing usually, but turnkey supports signing the raw payload directly if it's small, or we pass the hash.
-                // Usually Algorand requires prefixing "TX" before hashing.
-            },
-        });
-        const result = response.activity.result.signRawPayloadResult;
-        const r = result?.r;
-        const s = result?.s;
-        if (!r || !s) {
-            throw new Error("Failed to sign transaction with Turnkey: missing r or s in signature");
+        catch (err) {
+            lastError = err;
+            const status = err.status || err.statusCode;
+            const isRetryable = status >= 500 || err.code === "ENOTFOUND" || err.code === "ECONNRESET";
+            if (!isRetryable || attempt === MAX_RETRIES - 1) {
+                throw err;
+            }
+            console.warn(`Turnkey ${operation} failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${err.message}. Retrying in ${RETRY_DELAYS[attempt]}ms...`);
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
         }
-        const signature = r + s; // Simplified, in reality Algorand needs proper extraction
-        return signature;
+    }
+    throw lastError;
+}
+/**
+ * Create a sub-organization for an institution
+ */
+async function createSubOrganization(institutionId, institutionName) {
+    const config = getConfig();
+    const client = createClient();
+    try {
+        const response = await withRetry("createSubOrganization", async () => client.createSubOrganization({
+            organizationId: config.organizationId,
+            name: `${institutionName} (${institutionId})`,
+            rootUsers: [
+                {
+                    userName: `root-${institutionId}`,
+                    apiKeys: [
+                        {
+                            publicKey: config.apiPublicKey,
+                            privateKey: config.apiPrivateKey,
+                        },
+                    ],
+                },
+            ],
+        }));
+        const subOrgId = response.subOrganization?.id;
+        if (!subOrgId) {
+            throw new Error("No subOrgId returned from Turnkey");
+        }
+        return { subOrgId };
+    }
+    catch (err) {
+        const error = new errors_js_1.ApiError("TURNKEY_ERROR", "Failed to create sub-organization", { cause: err });
+        error.cause = err;
+        throw error;
     }
 }
-exports.TurnkeyService = TurnkeyService;
-exports.turnkeyService = new TurnkeyService();
+/**
+ * Create a wallet for an institution
+ *
+ * Returns:
+ * - walletId: The Turnkey wallet container ID
+ * - address: 64-char hex Ed25519 public key (used as signWith)
+ * - algorandAddress: 58-char Base32 Algorand address
+ */
+async function createWallet(subOrgId, label) {
+    const client = createClient();
+    try {
+        const walletName = `Wallet - ${label} - ${Date.now()}`;
+        const response = await withRetry("createWallet", async () => client.createWallet({
+            organizationId: subOrgId,
+            walletName,
+            accounts: [
+                {
+                    curve: "CURVE_ED25519",
+                    pathFormat: "PATH_FORMAT_BIP32",
+                    path: "m/44'/283'/0'/0/0",
+                    addressFormat: "ADDRESS_FORMAT_COMPRESSED",
+                },
+            ],
+        }));
+        const walletId = response.walletId;
+        const turnkeyAccountAddress = response.addresses?.[0];
+        if (!walletId || !turnkeyAccountAddress) {
+            throw new Error("Missing walletId or address in Turnkey response");
+        }
+        const algorandAddress = deriveAlgorandAddress(turnkeyAccountAddress);
+        return { walletId, address: turnkeyAccountAddress, algorandAddress };
+    }
+    catch (err) {
+        const error = new errors_js_1.ApiError("TURNKEY_ERROR", "Failed to create wallet", { cause: err });
+        error.cause = err;
+        throw error;
+    }
+}
+/**
+ * Sign a transaction with Turnkey
+ *
+ * Takes unsigned transaction bytes, signs with Turnkey's Ed25519 key,
+ * and returns the signed transaction bytes ready for submission
+ */
+async function signTransaction(walletAccountAddress, subOrgId, unsignedTxnBytes) {
+    const client = createClient();
+    try {
+        const txnHex = Buffer.from(unsignedTxnBytes).toString("hex");
+        // CRITICAL: signWith must be the exact 64-char lowercase hex from createWallet.addresses[0]
+        const signWithAddress = walletAccountAddress.toLowerCase();
+        const response = await withRetry("signTransaction", async () => client.signRawPayload({
+            organizationId: subOrgId,
+            signWith: signWithAddress,
+            payload: txnHex,
+            encoding: "PAYLOAD_ENCODING_HEXADECIMAL",
+            hashFunction: "HASH_FUNCTION_NOT_APPLICABLE",
+        }));
+        const r = response.r;
+        const s = response.s;
+        if (!r || !s) {
+            throw new Error("No signature returned from Turnkey");
+        }
+        // Combine r and s components into 64-byte Ed25519 signature
+        const rBytes = Buffer.from(r, "hex");
+        const sBytes = Buffer.from(s, "hex");
+        const signatureBytes = Buffer.concat([rBytes, sBytes]);
+        if (signatureBytes.length !== 64) {
+            throw new Error(`Invalid signature length: ${signatureBytes.length}, expected 64`);
+        }
+        // Decode the unsigned transaction
+        const unsignedTxn = algosdk_1.default.decodeUnsignedTransaction(unsignedTxnBytes);
+        // Create signed transaction envelope: { sig: Uint8Array(64), txn: Transaction }
+        const signedTxn = {
+            sig: signatureBytes,
+            txn: unsignedTxn,
+        };
+        // Encode the signed transaction
+        const signedTxnBytes = algosdk_1.default.encodeObj(signedTxn);
+        return signedTxnBytes;
+    }
+    catch (err) {
+        const error = new errors_js_1.ApiError("TURNKEY_ERROR", "Failed to sign transaction", { cause: err });
+        error.cause = err;
+        throw error;
+    }
+}
+/**
+ * Derive Algorand address from Turnkey public key
+ *
+ * Turnkey returns raw Ed25519 public key (32 bytes, hex-encoded as 64 chars)
+ * Encode as Algorand address (58-char Base32 with checksum)
+ */
+function deriveAlgorandAddress(publicKeyHex) {
+    const publicKeyBytes = Buffer.from(publicKeyHex, "hex");
+    return algosdk_1.default.encodeAddress(publicKeyBytes);
+}
 //# sourceMappingURL=turnkey.js.map

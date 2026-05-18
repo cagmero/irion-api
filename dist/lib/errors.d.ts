@@ -35,6 +35,7 @@ export declare const CODE_STATUS: {
     readonly INVALID_ASSET_ID: 422;
     readonly MISSING_IDEMPOTENCY_KEY: 400;
     readonly IDEMPOTENCY_KEY_TOO_LONG: 400;
+    readonly IDEMPOTENCY_IN_PROGRESS: 409;
     readonly INVALID_SIGNATURE_FORMAT: 400;
     readonly RATE_LIMITED: 429;
     readonly TURNKEY_ERROR: 502;

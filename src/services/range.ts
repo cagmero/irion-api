@@ -1,22 +1,22 @@
-export class RangeService {
-  /**
-   * STUBBED: Screen an institution's details against Range.org AML/Sanctions lists
-   */
-  async performDeepScreening(institutionName: string, country: string): Promise<{ status: "clear" | "flagged" | "rejected"; reportId: string }> {
-    // Mock network call
-    await new Promise(resolve => setTimeout(resolve, 400));
-    
-    // Stub implementation
-    if (institutionName.toLowerCase().includes("sanction")) {
-      return { status: "rejected", reportId: `mock-range-report-${Date.now()}` };
-    }
+// STUBBED: Range wallet screening not yet integrated.
+// See DEFERRED.md → "Wallet Screening Providers" for activation plan.
 
-    if (country.toLowerCase() === "kp" || country.toLowerCase() === "sy") {
-       return { status: "rejected", reportId: `mock-range-report-${Date.now()}` };
-    }
-
-    return { status: "clear", reportId: `mock-range-report-${Date.now()}` };
-  }
+export interface RangeScreenResult {
+  flagged: boolean;
+  riskScore: number;        // 0-1000
+  labels: string[];         // e.g. ["sanctioned", "exchange", "mixer"]
+  checkedAt: string;        // ISO 8601
 }
 
-export const rangeService = new RangeService();
+export async function screenWalletRange(algorandAddress: string): Promise<RangeScreenResult> {
+  // STUBBED: returns clean result for any address not in the test denylist
+  const denylist = (process.env.RANGE_MOCK_DENYLIST ?? "").split(",").filter(Boolean);
+  const flagged = denylist.includes(algorandAddress);
+
+  return {
+    flagged,
+    riskScore: flagged ? 950 : 10,
+    labels: flagged ? ["mock_denylist"] : [],
+    checkedAt: new Date().toISOString(),
+  };
+}

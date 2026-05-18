@@ -47,7 +47,7 @@ async function buildApp() {
     });
     await app.register(auth_js_1.default);
     await app.register(idempotency_js_1.default);
-    app.get("/health", async () => {
+    app.get("/health", { config: { rateLimitTier: "public" } }, async () => {
         return { status: "ok", time: new Date().toISOString() };
     });
     await (0, index_js_1.registerRoutes)(app);

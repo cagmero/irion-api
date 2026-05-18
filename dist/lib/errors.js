@@ -48,6 +48,7 @@ exports.CODE_STATUS = {
     // Client errors (400)
     MISSING_IDEMPOTENCY_KEY: 400,
     IDEMPOTENCY_KEY_TOO_LONG: 400,
+    IDEMPOTENCY_IN_PROGRESS: 409,
     INVALID_SIGNATURE_FORMAT: 400,
     // Rate limiting (429)
     RATE_LIMITED: 429,
@@ -107,6 +108,7 @@ const CODE_DETAIL = {
     // Client errors (400)
     MISSING_IDEMPOTENCY_KEY: "Idempotency-Key header is required",
     IDEMPOTENCY_KEY_TOO_LONG: "Idempotency-Key exceeds maximum length of 255 characters",
+    IDEMPOTENCY_IN_PROGRESS: "Another request with this idempotency key is still in progress",
     INVALID_SIGNATURE_FORMAT: "Irion-Signature header has invalid format (expected hex)",
     // Rate limiting (429)
     RATE_LIMITED: "Rate limit exceeded",

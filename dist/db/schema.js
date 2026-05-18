@@ -317,12 +317,16 @@ exports.idempotencyKeys = (0, pg_core_1.pgTable)("idempotency_keys", {
         .notNull()
         .references(() => exports.institutions.id),
     requestPath: (0, pg_core_1.varchar)("request_path", { length: 255 }).notNull(),
+    requestMethod: (0, pg_core_1.varchar)("request_method", { length: 10 }).notNull(),
+    requestBodyHash: (0, pg_core_1.varchar)("request_body_hash", { length: 64 }).notNull(),
     responseBody: (0, pg_core_1.jsonb)("response_body"),
-    responseStatus: (0, pg_core_1.integer)("response_status"),
+    responseStatus: (0, pg_core_1.integer)("response_status").notNull(),
+    responseHeaders: (0, pg_core_1.jsonb)("response_headers"),
     expiresAt: (0, pg_core_1.timestamp)("expires_at").notNull(),
     createdAt: (0, pg_core_1.timestamp)("created_at").notNull().defaultNow(),
 }, (table) => ({
     expiresAtIdx: (0, pg_core_1.index)("idx_idempotency_expires_at").on(table.expiresAt),
+    instPathIdx: (0, pg_core_1.index)("idx_idempotency_inst_path").on(table.institutionId, table.requestPath),
 }));
 // 19. audit_log
 exports.auditLog = (0, pg_core_1.pgTable)("audit_log", {

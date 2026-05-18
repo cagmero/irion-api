@@ -12,6 +12,7 @@ const tokenBodySchema = {
 };
 async function authRoutes(app) {
     app.post("/token", {
+        config: { rateLimitTier: "public" },
         schema: {
             body: tokenBodySchema,
             response: {

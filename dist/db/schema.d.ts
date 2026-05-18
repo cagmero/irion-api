@@ -2096,6 +2096,30 @@ export declare const idempotencyKeys: import("drizzle-orm/pg-core").PgTableWithC
             enumValues: [string, ...string[]];
             baseColumn: never;
         }, {}, {}>;
+        requestMethod: import("drizzle-orm/pg-core").PgColumn<{
+            name: "request_method";
+            tableName: "idempotency_keys";
+            dataType: "string";
+            columnType: "PgVarchar";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+        }, {}, {}>;
+        requestBodyHash: import("drizzle-orm/pg-core").PgColumn<{
+            name: "request_body_hash";
+            tableName: "idempotency_keys";
+            dataType: "string";
+            columnType: "PgVarchar";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+        }, {}, {}>;
         responseBody: import("drizzle-orm/pg-core").PgColumn<{
             name: "response_body";
             tableName: "idempotency_keys";
@@ -2115,6 +2139,18 @@ export declare const idempotencyKeys: import("drizzle-orm/pg-core").PgTableWithC
             columnType: "PgInteger";
             data: number;
             driverParam: string | number;
+            notNull: true;
+            hasDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+        }, {}, {}>;
+        responseHeaders: import("drizzle-orm/pg-core").PgColumn<{
+            name: "response_headers";
+            tableName: "idempotency_keys";
+            dataType: "json";
+            columnType: "PgJsonb";
+            data: unknown;
+            driverParam: unknown;
             notNull: false;
             hasDefault: false;
             enumValues: undefined;
