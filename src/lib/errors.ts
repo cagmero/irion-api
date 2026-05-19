@@ -8,11 +8,13 @@ export const CODE_STATUS = {
   INVALID_SIGNATURE: 401,
   MISSING_SIGNATURE: 401,
   INVALID_CREDENTIALS: 401,
+  ADMIN_AUTH_REQUIRED: 401,
 
   // Permission errors (403)
   IP_BLOCKED: 403,
   KYB_NOT_APPROVED: 403,
   INSUFFICIENT_PERMISSIONS: 403,
+  FORBIDDEN_RESOURCE: 403,
 
   // Not found errors (404)
   INSTITUTION_NOT_FOUND: 404,
@@ -30,6 +32,11 @@ export const CODE_STATUS = {
   WALLET_ALREADY_EXISTS: 409,
   INSTITUTION_ALREADY_EXISTS: 409,
   API_KEY_ALREADY_EXISTS: 409,
+  INSTITUTION_SUSPENDED: 409,
+  // Generic DB constraint violation — used by the global PG error handler so that
+  // individual FK/unique failures in *unexpected* code paths don't leak specific entity names.
+  // Route handlers that can identify the exact constraint should throw a specific ApiError instead.
+  DATABASE_CONSTRAINT_VIOLATION: 409,
 
   // Gone errors (410)
   FX_QUOTE_EXPIRED: 410,
@@ -45,6 +52,11 @@ export const CODE_STATUS = {
   COLLATERAL_INSUFFICIENT: 422,
   LOAN_ALREADY_REPAID: 422,
   INVALID_ASSET_ID: 422,
+  WALLET_REQUIRED: 422,
+  UNSUPPORTED_ASSET: 422,
+  WALLET_NOT_OPTED_IN: 422,
+  INSUFFICIENT_POSITION_BALANCE: 422,
+  POSITION_BALANCE_MISMATCH: 500,
 
   // Client errors (400)
   MISSING_IDEMPOTENCY_KEY: 400,
@@ -54,6 +66,7 @@ export const CODE_STATUS = {
 
   // Rate limiting (429)
   RATE_LIMITED: 429,
+  TURNKEY_QUOTA_EXCEEDED: 429,
 
   // Server errors (502)
   TURNKEY_ERROR: 502,
@@ -68,6 +81,10 @@ export const CODE_STATUS = {
   INTERNAL_ERROR: 500,
   DATABASE_ERROR: 500,
   REDIS_ERROR: 500,
+  POSITION_BALANCE_MISMATCH: 500,
+  SIGNING_FAILED: 500,
+  MISSING_PRIVATE_KEY: 500,
+  INVALID_SIGNING_PROVIDER: 500,
 } as const;
 
 export type ErrorCode = keyof typeof CODE_STATUS;
@@ -80,11 +97,13 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
   INVALID_SIGNATURE: "HMAC signature verification failed",
   MISSING_SIGNATURE: "Irion-Signature header is required",
   INVALID_CREDENTIALS: "Invalid client credentials",
+  ADMIN_AUTH_REQUIRED: "Admin authentication required",
 
   // Permission errors (403)
   IP_BLOCKED: "IP address is not in the allowed list",
   KYB_NOT_APPROVED: "Institution has not completed KYB approval",
   INSUFFICIENT_PERMISSIONS: "Insufficient permissions for this operation",
+  FORBIDDEN_RESOURCE: "Access to this resource is forbidden",
 
   // Not found errors (404)
   INSTITUTION_NOT_FOUND: "Institution not found",
@@ -102,6 +121,8 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
   WALLET_ALREADY_EXISTS: "Wallet already exists for this institution",
   INSTITUTION_ALREADY_EXISTS: "Institution already exists",
   API_KEY_ALREADY_EXISTS: "API key already exists",
+  INSTITUTION_SUSPENDED: "Institution is suspended and cannot perform this operation",
+  DATABASE_CONSTRAINT_VIOLATION: "Request conflicts with an existing record",
 
   // Gone errors (410)
   FX_QUOTE_EXPIRED: "FX quote has expired",
@@ -117,6 +138,11 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
   COLLATERAL_INSUFFICIENT: "Collateral is insufficient for this operation",
   LOAN_ALREADY_REPAID: "Loan has already been repaid",
   INVALID_ASSET_ID: "Invalid asset ID",
+  WALLET_REQUIRED: "Institution does not have a primary wallet. Call POST /v1/accounts/:id/wallets first.",
+  UNSUPPORTED_ASSET: "Asset ID is not supported for this operation",
+  WALLET_NOT_OPTED_IN: "Wallet has not opted into the required LP token",
+  INSUFFICIENT_POSITION_BALANCE: "Insufficient position balance for withdrawal",
+  POSITION_BALANCE_MISMATCH: "DB and on-chain position balances disagree",
 
   // Client errors (400)
   MISSING_IDEMPOTENCY_KEY: "Idempotency-Key header is required",
@@ -126,6 +152,7 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
 
   // Rate limiting (429)
   RATE_LIMITED: "Rate limit exceeded",
+  TURNKEY_QUOTA_EXCEEDED: "Turnkey signing quota exceeded — free tier limit reached. Retry after quota reset or upgrade plan.",
 
   // Server errors (502)
   TURNKEY_ERROR: "Turnkey service returned an error",
@@ -140,6 +167,9 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
   INTERNAL_ERROR: "An unexpected error occurred",
   DATABASE_ERROR: "Database operation failed",
   REDIS_ERROR: "Redis operation failed",
+  SIGNING_FAILED: "Transaction signing failed",
+  MISSING_PRIVATE_KEY: "Wallet has no private key stored",
+  INVALID_SIGNING_PROVIDER: "Wallet uses a different signing provider",
 };
 
 export class ApiError extends Error {

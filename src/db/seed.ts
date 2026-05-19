@@ -25,19 +25,23 @@ async function run() {
   const db = drizzle(postgres(process.env.DATABASE_URL!, { max: 1 }), { schema });
 
   const TEST_INSTITUTION_ID = "a0e9c5b1-8f3d-4c6e-b1a4-9d2e8f3c5a7b";
-  const TEST_WALLET_ID = "d4f8a2c3-1b5e-4f7a-9c3d-2e6b8a4f1c3d";
 
-  const IUSDC_ASSET_ID = parseInt(process.env.IUSDC_ASSET_ID || "758916950", 10);
+  const TEST_TEST_USDC_ASSET_ID = parseInt(process.env.TEST_TEST_USDC_ASSET_ID || "758916950", 10);
   const WEBHOOK_SIGNING_SECRET = process.env.WEBHOOK_SIGNING_SECRET || "default-webhook-secret";
 
   const plaintextHmacSecret = crypto.randomBytes(32);
   const encryptedHmacSecret = await pgcryptoEncrypt(plaintextHmacSecret, WEBHOOK_SIGNING_SECRET);
 
+  // client_id format matches auth.ts lookup: first 20 chars are the stored keyPrefix
+  // "iri_test_sk_1a2b3c4d" = "iri_test_sk_" (12) + "1a2b3c4d" (8 hex) = 20 chars
   const apiKeyPlain = "iri_test_sk_1a2b3c4d5e6f7g8h9i0j";
-  const apiKeyPrefix = "iri_test_";
+  const apiKeyPrefix = apiKeyPlain.substring(0, 20); // "iri_test_sk_1a2b3c4d"
+  // client_secret is a separate 64-char hex value (32 random bytes)
+  // For the seed we use the key itself as the secret so tests can authenticate with
+  // client_id=apiKeyPlain, client_secret=apiKeyPlain
   const apiKeyHash = await argon2.hash(apiKeyPlain, { type: argon2.argon2id });
 
-  const walletAddress = "7LMFMNBOMYZGN4X52HLKHL4JHW5R2CDZODKLLTW5WR5I6LKIBDBSHN4TY";
+
 
   const now = new Date();
   const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -64,17 +68,10 @@ async function run() {
     updatedAt: now,
   }).onConflictDoNothing();
 
-  await db.insert(schema.wallets).values({
-    id: TEST_WALLET_ID,
-    institutionId: TEST_INSTITUTION_ID,
-    label: "Test Primary Wallet",
-    isPrimary: true,
-    turnkeyWalletId: "00000000-0000-0000-0000-000000000000",
-    turnkeyAddress: walletAddress,
-    status: "active",
-    createdAt: now,
-    updatedAt: now,
-  }).onConflictDoNothing();
+  // No wallet row inserted for the seed institution intentionally.
+  // primaryWallet: null is a real production state (every institution before calling
+  // POST /v1/accounts/:id/wallets). Testing the null case is valuable.
+  // Run POST /v1/accounts/:id/wallets against TEST_INSTITUTION_ID to create a real wallet.
 
   await db.insert(schema.webhooks).values({
     id: "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
@@ -90,7 +87,7 @@ async function run() {
   await db.insert(schema.lendingPositions).values({
     id: "e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a9b",
     institutionId: TEST_INSTITUTION_ID,
-    assetId: IUSDC_ASSET_ID,
+    assetId: TEST_USDC_ASSET_ID,
     balance: 1_000_000,
     accruedYield: 5_000,
     lastAccrualAt: now,
@@ -101,7 +98,7 @@ async function run() {
   await db.insert(schema.borrowingPositions).values({
     id: "a7b8c9d0-e1f2-4a3b-9c4d-5e6f7a8b9c0d",
     institutionId: TEST_INSTITUTION_ID,
-    assetId: IUSDC_ASSET_ID,
+    assetId: TEST_USDC_ASSET_ID,
     balance: 500_000,
     accruedInterest: 1_000,
     lastAccrualAt: now,
@@ -116,11 +113,11 @@ async function run() {
     clientRequestId: "loan-test-001",
     type: "overcollateralized",
     status: "active",
-    assetId: IUSDC_ASSET_ID,
+    assetId: TEST_USDC_ASSET_ID,
     principalAmount: 500_000,
     borrowedAmount: 500_000,
     outstandingBalance: 500_000,
-    collateralAssetId: IUSDC_ASSET_ID,
+    collateralAssetId: TEST_USDC_ASSET_ID,
     collateralAmount: 1_000_000,
     interestRateBps: 500,
     ltvRatioBps: 5000,
@@ -172,9 +169,9 @@ async function run() {
   console.log(`TEST_INSTITUTION_ID=${TEST_INSTITUTION_ID}`);
   console.log(`TEST_API_KEY=${apiKeyPlain}`);
   console.log(`TEST_HMAC_SECRET=${plaintextHmacSecret.toString("hex")}`);
-  console.log(`TEST_WALLET_ID=${TEST_WALLET_ID}`);
+  // TEST_WALLET_ID removed — no seed wallet. Call POST /v1/accounts/:id/wallets to create one.
   console.log(`TEST_LOAN_ID=${testLoanId}`);
-  console.log(`IUSDC_ASSET_ID=${IUSDC_ASSET_ID}`);
+  console.log(`TEST_USDC_ASSET_ID=${TEST_USDC_ASSET_ID}`);
   console.log("\nStore TEST_API_KEY and TEST_HMAC_SECRET in .env.test for manual testing.");
 
   process.exit(0);

@@ -21,6 +21,10 @@ vi.mock("algosdk", () => ({
       return { publicKey: Buffer.from(hexKey, "hex") };
     }),
     decodeUnsignedTransaction: vi.fn(() => ({
+      // algosdk v3: attachSignature(senderAddress, sigBytes) → Uint8Array
+      // Mock returns valid signed-txn bytes so submitSignedTransaction can proceed.
+      attachSignature: vi.fn((_addr: string, _sig: Uint8Array) => new Uint8Array([0x82, 0xa3, 0x73, 0x69, 0x67, 0xc4, 0x40, ...new Array(64).fill(1), 0xa3, 0x74, 0x78, 0x6e, 0x80])),
+      bytesToSign: vi.fn(() => new Uint8Array(32)),
       txn: {
         fee: 1000,
         amt: 1000000,
@@ -65,7 +69,7 @@ describe("Turnkey Service", () => {
 
   // Test 1: createSubOrganization happy path
   it("createSubOrganization returns subOrgId on happy path", async () => {
-    mockCreateSubOrganization.mockResolvedValue({ subOrganization: { id: "sub-org-123" } });
+    mockCreateSubOrganization.mockResolvedValue({ subOrganizationId: "sub-org-123" });
 
     const { createSubOrganization } = await import("../services/turnkey.js");
     const result = await createSubOrganization("institution-1", "Test Bank");

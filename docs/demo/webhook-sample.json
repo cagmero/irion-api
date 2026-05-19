@@ -1,0 +1,41 @@
+{
+  "_comment": "Sample webhook payloads for deposit.confirmed and withdrawal.confirmed events — 2d.6 smoke test",
+  "_headers": {
+    "Content-Type": "application/json",
+    "Irion-Signature": "sha256=<64-char-hex-hmac>",
+    "Irion-Event": "<event-name>",
+    "Irion-Timestamp": "<ISO-8601-timestamp>"
+  },
+
+  "deposit_confirmed": {
+    "event": "deposit.confirmed",
+    "institutionId": "f82e3874-7b4c-42e8-a7c9-d0ca22692ac6",
+    "payload": {
+      "depositId": "a1d77139-c0bf-4b84-aaf4-88e56137d595",
+      "txHash": "OYDSQIQYMFPCDHYI2KPGN5A6F2FAF7A7LCSV2437DIO2SLHPGHWQ",
+      "amount": "1000000",
+      "assetId": 758916950,
+      "confirmedRound": 63542495
+    }
+  },
+
+  "withdrawal_confirmed": {
+    "event": "withdrawal.confirmed",
+    "institutionId": "f82e3874-7b4c-42e8-a7c9-d0ca22692ac6",
+    "payload": {
+      "withdrawalId": "1aa21905-22d6-4729-9ecd-2b30ca38639e",
+      "txHash": "LENZNOXFMQBZXZLQEX2I4MBOFMGLQIR4TE6HG35JNBB6URBNDGSQ",
+      "amount": "500000",
+      "assetId": 758916950,
+      "confirmedRound": 63542509
+    }
+  },
+
+  "_signature_verification": {
+    "algorithm": "HMAC-SHA256",
+    "input": "JSON.stringify(payload) — the entire request body",
+    "key": "institution.hmac_secret (one-time, returned at account creation)",
+    "header": "Irion-Signature: <64-char-hex-hmac>",
+    "note": "The worker enqueues to webhookDeliveryQueue which signs and delivers asynchronously"
+  }
+}

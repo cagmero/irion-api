@@ -8,6 +8,7 @@
 import { TurnkeyServerClient } from "@turnkey/sdk-server";
 import { ApiKeyStamper } from "@turnkey/api-key-stamper";
 import algosdk from "algosdk";
+import crypto from "crypto";
 import { getSecret } from "../lib/secrets.js";
 import { ApiError } from "../lib/errors.js";
 
@@ -30,15 +31,19 @@ function getConfig(): TurnkeyConfig {
   };
 }
 
-function createClient(): TurnkeyServerClient {
+function createClient(organizationId?: string): TurnkeyServerClient {
   const config = getConfig();
   const stamper = new ApiKeyStamper({
     apiPublicKey: config.apiPublicKey,
     apiPrivateKey: config.apiPrivateKey,
   });
+  // Use the provided organizationId (sub-org) or fall back to the root org.
+  // Turnkey requires the client's organizationId to match the request target org.
+  // Root org API keys have authority over sub-orgs, but the request must be scoped
+  // to the sub-org for wallet and signing operations.
   return new TurnkeyServerClient({
     apiBaseUrl: config.apiBaseUrl,
-    organizationId: config.organizationId,
+    organizationId: organizationId ?? config.organizationId,
     stamper,
   });
 }
@@ -54,6 +59,11 @@ async function withRetry<T>(
       return await fn();
     } catch (err: any) {
       lastError = err;
+      
+      // Turnkey error code 8 = quota exceeded — never retry
+      if (err.code === 8) {
+        throw err;
+      }
       
       const status = err.status || err.statusCode;
       const isRetryable = status >= 500 || err.code === "ENOTFOUND" || err.code === "ECONNRESET";
@@ -71,7 +81,22 @@ async function withRetry<T>(
 }
 
 /**
+ * Compress a P-256 public key from uncompressed (65 bytes, 04 + x + y) to
+ * compressed (33 bytes, 02/03 + x) format required by Turnkey.
+ */
+function compressPublicKey(uncompressedHex: string): string {
+  const bytes = Buffer.from(uncompressedHex, "hex");
+  const x = bytes.subarray(1, 33);
+  const y = bytes.subarray(33, 65);
+  const prefix = y[y.length - 1] % 2 === 0 ? "02" : "03";
+  return prefix + x.toString("hex");
+}
+
+/**
  * Create a sub-organization for an institution
+ * 
+ * Generates a new P-256 key pair for the sub-org's root user API key.
+ * The private key is NOT stored — the parent org's API key manages the sub-org.
  */
 export async function createSubOrganization(
   institutionId: string,
@@ -80,26 +105,52 @@ export async function createSubOrganization(
   const config = getConfig();
   const client = createClient();
   
+  // Generate a new P-256 key pair for the sub-org root user
+  const { publicKey: rootPublicKey } = crypto.generateKeyPairSync("ec", {
+    namedCurve: "P-256",
+    publicKeyEncoding: { format: "der", type: "spki" },
+    privateKeyEncoding: { format: "der", type: "pkcs8" },
+  });
+  
+  // Extract uncompressed public key from DER SPKI (last 65 bytes)
+  const pubKeyBuffer = rootPublicKey as Buffer;
+  const uncompressedHex = pubKeyBuffer.subarray(pubKeyBuffer.length - 65).toString("hex");
+  const compressedPublicKey = compressPublicKey(uncompressedHex);
+  
   try {
     const response = await withRetry("createSubOrganization", async () => 
       client.createSubOrganization({
         organizationId: config.organizationId,
-        name: `${institutionName} (${institutionId})`,
+        subOrganizationName: `${institutionName} (${institutionId})`,
+        rootQuorumThreshold: 1,
         rootUsers: [
           {
+            // The root user gets TWO API keys:
+            // 1. The generated ephemeral P-256 key (institutional root — placeholder for future use)
+            // 2. The server's TURNKEY_API_PUBLIC_KEY — allows this server to call createWallet
+            //    and signTransaction inside this sub-org using the same credentials as the root org.
+            //    Without this, wallet/signing operations fail with ORGANIZATION_MISMATCH.
             userName: `root-${institutionId}`,
             apiKeys: [
               {
+                apiKeyName: `api-key-${institutionId}`,
+                publicKey: compressedPublicKey,
+                curveType: "API_KEY_CURVE_P256",
+              },
+              {
+                apiKeyName: `server-api-key-${institutionId}`,
                 publicKey: config.apiPublicKey,
-                privateKey: config.apiPrivateKey,
+                curveType: "API_KEY_CURVE_P256",
               },
             ],
+            authenticators: [],
+            oauthProviders: [],
           },
         ],
       } as any)
     );
     
-    const subOrgId = (response as any).subOrganization?.id;
+    const subOrgId = (response as any).subOrganizationId;
     if (!subOrgId) {
       throw new Error("No subOrgId returned from Turnkey");
     }
@@ -124,7 +175,8 @@ export async function createWallet(
   subOrgId: string,
   label: string
 ): Promise<{ walletId: string; address: string; algorandAddress: string }> {
-  const client = createClient();
+  // Client must be scoped to the sub-org — Turnkey rejects cross-org wallet creation.
+  const client = createClient(subOrgId);
   
   try {
     const walletName = `Wallet - ${label} - ${Date.now()}`;
@@ -172,19 +224,24 @@ export async function signTransaction(
   subOrgId: string,
   unsignedTxnBytes: Uint8Array
 ): Promise<Uint8Array> {
+  // Use root org client — the root API key has authority over sub-org resources.
   const client = createClient();
   
   try {
-    const txnHex = Buffer.from(unsignedTxnBytes).toString("hex");
+    // Decode the unsigned transaction to get the correct signable bytes.
+    // Algorand signs SHA512/256("TX" + msgpack(txn)), which Transaction.bytesToSign() computes.
+    const unsignedTxn = algosdk.decodeUnsignedTransaction(unsignedTxnBytes);
+    const signableBytes = unsignedTxn.bytesToSign();
+    const signableHex = Buffer.from(signableBytes).toString("hex");
     
-    // CRITICAL: signWith must be the exact 64-char lowercase hex from createWallet.addresses[0]
+    // signWith must be the exact address from createWallet.addresses[0]
     const signWithAddress = walletAccountAddress.toLowerCase();
     
     const response = await withRetry("signTransaction", async () =>
       client.signRawPayload({
         organizationId: subOrgId,
         signWith: signWithAddress,
-        payload: txnHex,
+        payload: signableHex,
         encoding: "PAYLOAD_ENCODING_HEXADECIMAL",
         hashFunction: "HASH_FUNCTION_NOT_APPLICABLE",
       } as any)
@@ -206,20 +263,29 @@ export async function signTransaction(
       throw new Error(`Invalid signature length: ${signatureBytes.length}, expected 64`);
     }
     
-    // Decode the unsigned transaction
-    const unsignedTxn = algosdk.decodeUnsignedTransaction(unsignedTxnBytes);
-    
-    // Create signed transaction envelope: { sig: Uint8Array(64), txn: Transaction }
-    const signedTxn = {
-      sig: signatureBytes,
-      txn: unsignedTxn,
-    };
-    
-    // Encode the signed transaction
-    const signedTxnBytes = algosdk.encodeObj(signedTxn);
+    // algosdk v3: use Transaction.attachSignature(senderAddress, sig) to produce
+    // correctly encoded msgpack bytes. The old approach of algosdk.encodeObj({ sig, txn })
+    // produces camelCase field names that algod rejects with:
+    //   "msgpack decode error: no matching struct field found when decoding stream map with key assetTransfer"
+    // attachSignature() uses Transaction.toEncodingData() which emits the correct
+    // abbreviated msgpack keys (e.g. "arcv", "xaid") expected by algod.
+    const walletAddress = walletAccountAddress.startsWith("0x")
+      ? algosdk.encodeAddress(Buffer.from(walletAccountAddress.slice(2), "hex"))
+      : algosdk.encodeAddress(Buffer.from(walletAccountAddress, "hex"));
+    const signedTxnBytes = unsignedTxn.attachSignature(walletAddress, signatureBytes);
     
     return signedTxnBytes;
   } catch (err: any) {
+    // Turnkey error code 8 = quota exceeded — map to a specific error with Retry-After hint
+    if (err.code === 8) {
+      const error = new ApiError(
+        "TURNKEY_QUOTA_EXCEEDED",
+        "Turnkey signing quota exceeded. Free tier limit reached — retry after quota reset or upgrade plan.",
+        { cause: err, retryAfterSeconds: 3600 }
+      );
+      error.cause = err;
+      throw error;
+    }
     const error = new ApiError("TURNKEY_ERROR", "Failed to sign transaction", { cause: err });
     error.cause = err;
     throw error;

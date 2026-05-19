@@ -1,1 +1,0 @@
-{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../../src/services/kyb/index.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,YAAY,CAAC;AAM9C,wBAAgB,cAAc,IAAI,WAAW,CAmB5C;AAED,OAAO,EAAE,eAAe,EAAE,MAAM,oBAAoB,CAAC;AACrD,OAAO,EAAE,gBAAgB,EAAE,MAAM,qBAAqB,CAAC;AACvD,YAAY,EAAE,WAAW,EAAE,UAAU,EAAE,gBAAgB,EAAE,SAAS,EAAE,MAAM,YAAY,CAAC"}

@@ -81,6 +81,7 @@ export class MockKybProvider implements KybProvider {
 
     const connection = new IORedis(redisUrl, {
       maxRetriesPerRequest: null,
+      tls: {},
     });
 
     const kybMockQueue = new Queue("kyb-mock-completion", { connection });

@@ -136,18 +136,25 @@ export function setupSentry(app: FastifyInstance) {
     }
 
     // Database errors - map PG error codes
+    //
+    // INTENTIONALLY generic: 23503 (FK violation) and 23505 (unique violation) both map
+    // to DATABASE_CONSTRAINT_VIOLATION (409). We do NOT map them to specific entity errors
+    // (e.g. INSTITUTION_NOT_FOUND, INSTITUTION_ALREADY_EXISTS) at the global handler level
+    // because the same PG code fires for *any* FK/unique constraint in the codebase.
+    // Route handlers that can confidently identify a specific constraint should throw a
+    // typed ApiError *before* the DB call fails (e.g. pre-check with SELECT, or catch the
+    // error closer to the source and re-throw with the correct code).
     const pgCode = (error as Error & { code?: string }).code;
-    if (pgCode === "23505") {
-      const body = problemDetails(request, "INSTITUTION_ALREADY_EXISTS", "Resource already exists");
+    if (pgCode === "23505" || pgCode === "23503") {
+      const constraintName = (error as any).constraint ?? "unknown";
+      const body = problemDetails(
+        request,
+        "DATABASE_CONSTRAINT_VIOLATION",
+        "Request conflicts with an existing record"
+      );
       (reply as any).header("Content-Type", "application/problem+json");
-      request.log.error({ err: error, requestId, pgCode }, "database unique violation");
+      request.log.error({ err: error, requestId, pgCode, constraintName }, "database constraint violation");
       return reply.status(409).send(body);
-    }
-    if (pgCode === "23503") {
-      const body = problemDetails(request, "INSTITUTION_NOT_FOUND", "Referenced resource not found");
-      (reply as any).header("Content-Type", "application/problem+json");
-      request.log.error({ err: error, requestId, pgCode }, "database foreign key violation");
-      return reply.status(404).send(body);
     }
 
     // Client errors (4xx status codes)

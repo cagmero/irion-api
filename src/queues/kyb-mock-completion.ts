@@ -17,8 +17,10 @@ if (!redisUrl || (!redisUrl.startsWith("redis://") && !redisUrl.startsWith("redi
   throw new Error("REDIS_URL is missing or malformed. Must start with redis:// or rediss://");
 }
 
+// REFACTOR: Centralize ioredis config into src/lib/redis.ts — see DEFERRED.md "Tech Debt — Redis client centralization"
 const connection = new IORedis(redisUrl, {
   maxRetriesPerRequest: null,
+  tls: {},
 });
 
 const webhookSecret = getSecret("MOCK_KYB_WEBHOOK_SECRET");
