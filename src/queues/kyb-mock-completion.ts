@@ -20,7 +20,6 @@ if (!redisUrl || (!redisUrl.startsWith("redis://") && !redisUrl.startsWith("redi
 // REFACTOR: Centralize ioredis config into src/lib/redis.ts — see DEFERRED.md "Tech Debt — Redis client centralization"
 const connection = new IORedis(redisUrl, {
   maxRetriesPerRequest: null,
-  tls: {},
 });
 
 const webhookSecret = getSecret("MOCK_KYB_WEBHOOK_SECRET");

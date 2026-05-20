@@ -15,7 +15,7 @@ const RATE_LIMIT_AUTH_WINDOW_SEC = Math.ceil(RATE_LIMIT_AUTH_WINDOW_MS / 1000);
 
 // Skip rate limiting in test environment (checked at runtime)
 function shouldSkipRateLimit(): boolean {
-  return process.env.NODE_ENV === "test";
+  return process.env.NODE_ENV === "test" || process.env.DISABLE_RATE_LIMIT === "true";
 }
 
 // Cache for tier limits (stub for future per-institution override support)
@@ -55,7 +55,7 @@ function getRateLimitTier(request: FastifyRequest): "public" | "auth" {
 }
 
 async function rateLimitRequest(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  // Skip rate limiting in test environment
+  // Skip rate limiting in test / demo environments
   if (shouldSkipRateLimit()) return;
 
   const tier = getRateLimitTier(request);
@@ -68,26 +68,30 @@ async function rateLimitRequest(request: FastifyRequest, reply: FastifyReply): P
   const limit = isPublicTier ? RATE_LIMIT_PUBLIC_MAX : RATE_LIMIT_AUTH_MAX;
   const windowSec = isPublicTier ? RATE_LIMIT_PUBLIC_WINDOW_SEC : RATE_LIMIT_AUTH_WINDOW_SEC;
 
-  const redis = getRedis();
-  const current = await redis.incr(key);
-  
-  if (current === 1) {
-    await redis.expire(key, windowSec);
-  }
+  try {
+    const redis = getRedis();
+    const current = await redis.incr(key);
+    
+    if (current === 1) {
+      await redis.expire(key, windowSec);
+    }
 
-  const remaining = Math.max(0, limit - current);
-  const resetTimestamp = Math.ceil(Date.now() / 1000) + windowSec;
+    const remaining = Math.max(0, limit - current);
+    const resetTimestamp = Math.ceil(Date.now() / 1000) + windowSec;
 
-  // Set headers on every response (informational)
-  reply.header("X-RateLimit-Limit", String(limit));
-  reply.header("X-RateLimit-Remaining", String(remaining));
-  reply.header("X-RateLimit-Reset", String(resetTimestamp));
+    reply.header("X-RateLimit-Limit", String(limit));
+    reply.header("X-RateLimit-Remaining", String(remaining));
+    reply.header("X-RateLimit-Reset", String(resetTimestamp));
 
-  if (current > limit) {
-    reply.header("Retry-After", String(windowSec));
-    return reply
-      .status(429)
-      .send(problemDetails(request, "RATE_LIMITED", `Rate limit exceeded. Retry after ${windowSec} seconds`));
+    if (current > limit) {
+      reply.header("Retry-After", String(windowSec));
+      return reply
+        .status(429)
+        .send(problemDetails(request, "RATE_LIMITED", `Rate limit exceeded. Retry after ${windowSec} seconds`));
+    }
+  } catch {
+    // Redis unavailable (e.g. rate limit exceeded on Upstash free tier).
+    // Allow request through without rate limiting.
   }
 }
 

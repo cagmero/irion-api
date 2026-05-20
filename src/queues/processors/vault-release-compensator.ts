@@ -28,7 +28,7 @@ const POLL_INTERVAL_MS = 3000;
 
 const redisConnection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
   maxRetriesPerRequest: null,
-  tls: {},
+  
 });
 
 async function waitForConfirm(txId: string): Promise<any> {

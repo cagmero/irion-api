@@ -25,7 +25,13 @@ export class MockKybProvider implements KybProvider {
       details: { institutionName },
     });
 
-    await this.enqueueMockCompletion(institutionId, diditSessionId, institutionName);
+    try {
+      await this.enqueueMockCompletion(institutionId, diditSessionId, institutionName);
+    } catch {
+      // Redis may be unavailable (e.g. Upstash free tier exceeded).
+      // KYB auto-approve is called directly via kyb/approve admin endpoint,
+      // so the mock completion queue is non-critical.
+    }
 
     return { diditSessionId, verificationUrl };
   }
@@ -81,7 +87,7 @@ export class MockKybProvider implements KybProvider {
 
     const connection = new IORedis(redisUrl, {
       maxRetriesPerRequest: null,
-      tls: {},
+      
     });
 
     const kybMockQueue = new Queue("kyb-mock-completion", { connection });

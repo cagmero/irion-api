@@ -33,7 +33,6 @@ const POLL_INTERVAL_MS = 3000;
 
 const redisConnection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
   maxRetriesPerRequest: null,
-  tls: {},
 });
 
 function encodeBoxName(prefix: string, value: number): Uint8Array {

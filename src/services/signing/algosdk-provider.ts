@@ -43,7 +43,7 @@ export class AlgosdkSigningProvider implements SigningProvider {
         isPrimary: true,
         // Turnkey-specific fields (not used for algosdk, but required by schema)
         turnkeyWalletId: `algosdk-${walletId()}`,  // Placeholder, not used
-        turnkeyAddress: algosdk.decodeAddress(algorandAddress).publicKey.toString("hex"),  // 64-char hex
+        turnkeyAddress: Buffer.from(algosdk.decodeAddress(algorandAddress).publicKey).toString("hex"),  // 64-char hex
         algorandAddress,
         signingProvider: "algosdk",
         encryptedSkCiphertext: encryptedSk.ciphertext,

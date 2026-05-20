@@ -28,7 +28,7 @@ const POLL_INTERVAL_MS = 2000;
 
 const redisConnection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
   maxRetriesPerRequest: null,
-  tls: {},
+  
 });
 
 export async function processLoanOriginationConfirm(job: Job<LoanOriginationConfirmJob>): Promise<void> {
@@ -97,6 +97,7 @@ export async function processLoanOriginationConfirm(job: Job<LoanOriginationConf
       // Update loan: active
       await db.update(loans).set({
         status: "active",
+        txHash,
         originatedAt: sql`now()`,
       }).where(eq(loans.id, loanId));
 

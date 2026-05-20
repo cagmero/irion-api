@@ -20,7 +20,6 @@ const BACKOFF_DELAYS_MS = [60_000, 300_000, 900_000, 3_600_000, 21_600_000];
 
 const redisConnection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
   maxRetriesPerRequest: null,
-  tls: {},
 });
 
 export function computeNextRetry(attempt: number): Date {

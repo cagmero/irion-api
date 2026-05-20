@@ -1,3 +1,4 @@
+import { createRedisConnection } from "../../lib/redis.js";
 import { Worker, Job } from "bullmq";
 import Redis from "ioredis";
 import algosdk from "algosdk";
@@ -22,7 +23,7 @@ const ORACLE_ID = parseInt(process.env.CREDIT_ORACLE_APP_ID ?? "762892340");
 const POOL_ASSET = parseInt(process.env.TEST_USDC_ASSET_ID ?? "758916950");
 const R = 180_000;
 const PI = 3000;
-const rc = new Redis(process.env.REDIS_URL || "redis://localhost:6379", { maxRetriesPerRequest: null, tls: {} });
+const rc = createRedisConnection();
 
 function eb(p: string, v: number) { const b = new Uint8Array(9); b[0] = p.charCodeAt(0); new DataView(b.buffer, b.byteOffset, b.byteLength).setBigUint64(1, BigInt(v), false); return b; }
 function ea(a: string) { const d = algosdk.decodeAddress(a); const b = new Uint8Array(33); b[0] = 0x75; b.set(d.publicKey, 1); return b; }

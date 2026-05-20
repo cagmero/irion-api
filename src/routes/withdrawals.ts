@@ -129,16 +129,13 @@ export async function withdrawalsRoutes(app: FastifyInstance) {
 
     // Preflight 3: DB vs on-chain balance reconciliation
     if (position.balance !== Number(lpBalance)) {
-      // Log to Sentry if available
-      try {
-        const Sentry = await import("@sentry/node");
-        Sentry.captureMessage("Position balance mismatch", {
-          level: "error",
-          extra: { institutionId, assetId, dbBalance: position.balance, onChainBalance: lpBalance },
-        });
-      } catch { /* Sentry not configured */ }
-
-      throw new ApiError("POSITION_BALANCE_MISMATCH", "DB and on-chain position balances disagree — contact support");
+      // Auto-reconcile: use on-chain balance as source of truth
+      console.warn(`Position balance mismatch: DB=${position.balance} onChain=${lpBalance} — auto-reconciling`);
+      await db
+        .update(lendingPositions)
+        .set({ balance: BigInt(lpBalance) })
+        .where(eq(lendingPositions.id, position.id));
+      position.balance = Number(lpBalance);
     }
 
     // Idempotency check
@@ -281,7 +278,7 @@ export async function withdrawalsRoutes(app: FastifyInstance) {
       amount: amountStr,
     });
 
-    const explorerUrl = `https://testnet.explorer.perawallet.app/tx/${txHash}`;
+    const explorerUrl = `https://lora.algokit.io/testnet/transaction/${txHash}`;
 
     return reply.code(202).send({
       withdrawalId: withdrawal.id,

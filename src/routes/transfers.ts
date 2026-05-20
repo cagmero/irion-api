@@ -239,7 +239,7 @@ export async function transfersRoutes(app: FastifyInstance) {
       amount: amountStr,
     });
 
-    const explorerUrl = `https://testnet.explorer.perawallet.app/tx/${txHash}`;
+    const explorerUrl = `https://lora.algokit.io/testnet/transaction/${txHash}`;
 
     return reply.code(202).send({
       depositId:   deposit.id,
@@ -336,7 +336,7 @@ export async function transfersRoutes(app: FastifyInstance) {
     await db.update(transfers).set({ status: "submitted", txHash }).where(eq(transfers.id, transfer.id));
     await db.insert(auditLog).values({ institutionId, action: "transfer.submitted", details: { transferId: transfer.id, fromWalletId, toWalletId, amount: amountStr, txHash } });
 
-    const explorerUrl = `https://testnet.explorer.perawallet.app/tx/${txHash}`;
+    const explorerUrl = `https://lora.algokit.io/testnet/transaction/${txHash}`;
     return reply.code(202).send({ id: transfer.id, txHash, explorerUrl, status: "submitted" });
   });
 }

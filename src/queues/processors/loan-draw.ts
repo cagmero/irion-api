@@ -1,3 +1,4 @@
+import { createRedisConnection } from "../../lib/redis.js";
 import { Worker, Job } from "bullmq";
 import Redis from "ioredis";
 import algosdk from "algosdk";
@@ -18,7 +19,7 @@ const CREDIT_ORACLE_APP_ID = parseInt(process.env.CREDIT_ORACLE_APP_ID ?? "76289
 const POOL_ASSET_ID = parseInt(process.env.TEST_USDC_ASSET_ID ?? "758916950");
 const CONFIRM_TIMEOUT_MS = 180_000;
 const POLL_INTERVAL_MS = 3000;
-const redisConnection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", { maxRetriesPerRequest: null, tls: {} });
+const redisConnection = createRedisConnection();
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 async function waitForConfirm(txId: string): Promise<any> {

@@ -411,6 +411,45 @@ describe("POST /v1/loans", () => {
     await app.close();
   });
 
+  it("GET /v1/loans — returns list for institution", async () => {
+    const token = await makeTestToken(INSTITUTION_ID);
+    const app = await buildApp();
+
+    // Override select for list query: auth call (1) then loans list (2)
+    const { db } = await import("../db/index.js");
+    let selectCount = 0;
+    (db.select as any).mockImplementation(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          and: vi.fn(() => ({ limit: vi.fn(() => {
+            selectCount++;
+            if (selectCount === 1) return mockAuthLimit();
+            return Promise.resolve([LOAN_ROW]);
+          })})),
+          limit: vi.fn(() => {
+            selectCount++;
+            if (selectCount === 1) return mockAuthLimit();
+            return Promise.resolve([LOAN_ROW]);
+          }),
+          orderBy: vi.fn().mockResolvedValue([LOAN_ROW]),
+        })),
+      })),
+    }));
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/loans",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    if (res.statusCode !== 200) console.log("[loans GET body]", res.json());
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.loans).toBeDefined();
+    expect(body.loans.length).toBeGreaterThan(0);
+    await app.close();
+  });
+
   it("13. No JWT → 401", async () => {
     const app = await buildApp();
 

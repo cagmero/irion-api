@@ -191,10 +191,57 @@ export async function loansRoutes(app: FastifyInstance) {
     return reply.code(202).send({ id: instLoan.id, status: "pending" });
   }
 
-  throw new ApiError("VALIDATION_FAILED", "Unsupported loan type");
-});
+    throw new ApiError("VALIDATION_FAILED", "Unsupported loan type");
+  });
 
-// ── GET /v1/loans/:id/schedule — Get installment schedule ────────
+  // ── GET /v1/loans — List all loans for authenticated institution ──
+  app.get("/", {
+    preHandler: [async (request: FastifyRequest, reply: FastifyReply) => {
+      await (request.server as any).authenticate(request, reply);
+    }],
+    schema: {
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            loans: { type: "array" },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest) => {
+    const institutionId = request.institutionId;
+    const rows = await db.select().from(loans).where(eq(loans.institutionId, institutionId)).orderBy(loans.createdAt);
+    return {
+      loans: rows.map((loan) => ({
+        id: loan.id, status: loan.status, type: loan.type,
+        assetId: loan.assetId,
+        principalAmount: loan.principalAmount?.toString() ?? "0",
+        borrowedAmount: loan.borrowedAmount?.toString() ?? "0",
+        outstandingBalance: loan.outstandingBalance?.toString() ?? "0",
+        collateralAssetId: loan.collateralAssetId,
+        collateralAmount: loan.collateralAmount?.toString() ?? null,
+        collateralRatioBps: loan.collateralRatioBps,
+        creditLimit: loan.creditLimit?.toString() ?? null,
+        drawnAmount: loan.drawnAmount?.toString() ?? "0",
+        accruedInterest: loan.accruedInterest?.toString() ?? "0",
+        interestRateBps: loan.interestRateBps,
+        termDays: loan.termDays,
+        installmentCount: loan.installmentCount,
+        installmentsPaid: loan.installmentsPaid,
+        onchainLoanId: loan.onchainLoanId?.toString() ?? null,
+        maturityRound: loan.maturityRound?.toString() ?? null,
+        txHash: loan.txHash,
+        vaultId: loan.vaultId,
+        nextPaymentDueAt: loan.nextPaymentDueAt?.toISOString() ?? null,
+        originatedAt: loan.originatedAt?.toISOString() ?? null,
+        maturesAt: loan.maturesAt?.toISOString() ?? null,
+        createdAt: loan.createdAt.toISOString(),
+      })),
+    };
+  });
+
+  // ── GET /v1/loans/:id/schedule — Get installment schedule ────────
 app.get("/:id/schedule", {
   schema: {
     params: { type: "object", required: ["id"], properties: { id: { type: "string", format: "uuid" } } },
@@ -322,7 +369,9 @@ app.get("/:id/schedule", {
       drawnAmount: drawnAmount.toString(),
       availableCredit: (creditLimit - drawnAmount).toString(),
       collateralRatio: loan.collateralRatioBps ? (loan.collateralRatioBps / 100).toFixed(2) : "0",
-      draws: draws.map((d: any) => ({ id: d.id, amount: d.amount.toString(), status: d.status, txHash: d.txHash, createdAt: d.createdAt })),
+      txHash: loan.txHash ?? null,
+      explorerUrl: loan.txHash ? `https://lora.algokit.io/testnet/transaction/${loan.txHash}` : null,
+      draws: draws.map((d: any) => ({ id: d.id, amount: d.amount?.toString() ?? "0", status: d.status, txHash: d.txHash, createdAt: d.createdAt })),
     };
   });
 

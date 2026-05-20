@@ -33,7 +33,6 @@ const POLL_INTERVAL_MS = 2_000;   // check every 2s within an attempt
 
 const redisConnection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
   maxRetriesPerRequest: null,
-  tls: {},
 });
 
 async function processDepositConfirmation(job: Job<DepositConfirmationJob>): Promise<void> {

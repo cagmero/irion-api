@@ -7,6 +7,8 @@ import { withdrawalsRoutes } from "./withdrawals";
 import { webhooksRoutes } from "./webhooks";
 import { payoutsRoutes } from "./payouts";
 import { fxRoutes } from "./fx";
+import { adminRoutes } from "./admin";
+import { transactionsRoutes } from "./transactions";
 
 export async function registerRoutes(app: FastifyInstance) {
   await app.register(authRoutes, { prefix: "/v1/auth" });
@@ -17,4 +19,6 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(withdrawalsRoutes, { prefix: "/v1" }); // Handles /withdrawals
   await app.register(fxRoutes, { prefix: "/v1/fx" });
   await app.register(webhooksRoutes, { prefix: "/v1/webhooks" });
+  await app.register(adminRoutes, { prefix: "/v1/admin" });
+  await app.register(transactionsRoutes, { prefix: "/v1/transactions" });
 }

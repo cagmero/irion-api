@@ -10,6 +10,7 @@
  *   - >5 installments: 422 INSTALLMENT_BATCH_TOO_LARGE
  */
 
+import { createRedisConnection } from "../../lib/redis.js";
 import { Worker, Job } from "bullmq";
 import Redis from "ioredis";
 import algosdk from "algosdk";
@@ -34,7 +35,7 @@ const LENDING_POOL_ID = parseInt(process.env.LENDING_POOL_V2_USDC_APP_ID ?? "762
 const ORACLE_ID = parseInt(process.env.CREDIT_ORACLE_APP_ID ?? "762892340");
 const BATCH_MAX = 5;
 
-const rc = new Redis(process.env.REDIS_URL || "redis://localhost:6379", { maxRetriesPerRequest: null, tls: {} });
+const rc = createRedisConnection();
 
 function eb(p: string, v: number) { const b = new Uint8Array(9); b[0] = p.charCodeAt(0); new DataView(b.buffer, b.byteOffset, b.byteLength).setBigUint64(1, BigInt(v), false); return b; }
 function sl(m: number) { return new Promise(r => setTimeout(r, m)); }
@@ -73,6 +74,21 @@ export async function processLoanRepay(job: Job<LoanRepayJob>): Promise<void> {
         const sO = await signWithGovernance(algosdk.encodeUnsignedTransaction(oTxn), async (a, d) => { await db.insert(auditLog).values({ institutionId, action: a, details: d }); });
         await algorandService.submitSignedTransaction(sO);
       } catch { /* non-fatal */ }
+      return;
+    }
+
+    if (loan.type === "overcollateralized" || loan.type === "term") {
+      // OVERCOLLATERALIZED / TERM: wallet sends USDC to pool, mark repaid
+      const sp = await ad.getTransactionParams().do();
+      const txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+        sender: walletAddress, receiver: POOL_ADDR, assetIndex: POOL_ASSET, amount: amt, suggestedParams: sp,
+      });
+      const signed = await sg.signTransaction(walletId, algosdk.encodeUnsignedTransaction(txn));
+      const txH = await algorandService.submitSignedTransaction(signed);
+      await sl(5000);
+      await db.update(loans).set({ status: "repaid", txHash: txH, repaidAt: sql`now()` }).where(eq(loans.id, loanId));
+      await db.insert(auditLog).values({ institutionId, action: "loan.repaid", details: { loanId, txHash: txH, amount } });
+      console.log(`[loan-repay] ${loan.type} loan ${loanId} repaid: ${txH}`);
       return;
     }
 

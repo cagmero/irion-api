@@ -7,6 +7,7 @@ import { algorandService } from "../services/algorand.js";
 import { ApiError } from "../lib/errors.js";
 import { getSigningProvider } from "../services/signing/index.js";
 import { screenWallet } from "../services/wallet-screening.js";
+import { explorerUrl } from "../lib/explorer.js";
 
 export async function payoutsRoutes(app: FastifyInstance) {
   app.post("/payouts", {
@@ -75,6 +76,6 @@ export async function payoutsRoutes(app: FastifyInstance) {
     await db.update(transfers).set({ status: "submitted", txHash }).where(eq(transfers.id, transfer.id));
     await db.insert(auditLog).values({ institutionId, action: "payout.submitted", details: { transferId: transfer.id, destinationAddress, amount: amountStr, txHash, memo } });
 
-    return reply.code(202).send({ id: transfer.id, txHash, explorerUrl: `https://testnet.explorer.perawallet.app/tx/${txHash}`, status: "submitted" });
+    return reply.code(202).send({ id: transfer.id, txHash, explorerUrl: explorerUrl.tx(txHash), status: "submitted" });
   });
 }
