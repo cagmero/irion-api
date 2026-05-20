@@ -12,13 +12,16 @@ export const CODE_STATUS = {
 
   // Permission errors (403)
   IP_BLOCKED: 403,
+  DESTINATION_SCREENED: 403,
   KYB_NOT_APPROVED: 403,
   INSUFFICIENT_PERMISSIONS: 403,
   FORBIDDEN_RESOURCE: 403,
+  WALLET_INSTITUTION_MISMATCH: 403,
 
   // Not found errors (404)
   INSTITUTION_NOT_FOUND: 404,
   WALLET_NOT_FOUND: 404,
+  QUOTE_NOT_FOUND: 404,
   LOAN_NOT_FOUND: 404,
   WEBHOOK_NOT_FOUND: 404,
   FX_QUOTE_NOT_FOUND: 404,
@@ -33,6 +36,11 @@ export const CODE_STATUS = {
   INSTITUTION_ALREADY_EXISTS: 409,
   API_KEY_ALREADY_EXISTS: 409,
   INSTITUTION_SUSPENDED: 409,
+  LOAN_ALREADY_ACTIVE: 409,
+  QUOTE_ALREADY_USED: 409,
+  INSUFFICIENT_AVAILABLE_CREDIT: 422,
+  INSTALLMENT_BATCH_TOO_LARGE: 422,
+  EXCESS_PAYMENT: 422,
   // Generic DB constraint violation — used by the global PG error handler so that
   // individual FK/unique failures in *unexpected* code paths don't leak specific entity names.
   // Route handlers that can identify the exact constraint should throw a specific ApiError instead.
@@ -50,13 +58,18 @@ export const CODE_STATUS = {
   INSUFFICIENT_BALANCE: 422,
   WALLET_SCREENING_FAILED: 422,
   COLLATERAL_INSUFFICIENT: 422,
+  INSUFFICIENT_COLLATERAL: 422,
+  COLLATERAL_RATIO_TOO_LOW: 422,
+  QUOTE_EXPIRED: 422,
   LOAN_ALREADY_REPAID: 422,
   INVALID_ASSET_ID: 422,
   WALLET_REQUIRED: 422,
+  DESTINATION_NOT_OPTED_IN: 422,
+  INVALID_DESTINATION_ADDRESS: 422,
   UNSUPPORTED_ASSET: 422,
+  UNSUPPORTED_ASSET_PAIR: 422,
   WALLET_NOT_OPTED_IN: 422,
   INSUFFICIENT_POSITION_BALANCE: 422,
-  POSITION_BALANCE_MISMATCH: 500,
 
   // Client errors (400)
   MISSING_IDEMPOTENCY_KEY: 400,
@@ -76,6 +89,7 @@ export const CODE_STATUS = {
   RANGE_ERROR: 502,
   HAPI_ERROR: 502,
   EXTERNAL_SERVICE_ERROR: 502,
+  VAULT_CREATION_FAILED: 502,
 
   // Internal errors (500)
   INTERNAL_ERROR: 500,
@@ -85,6 +99,9 @@ export const CODE_STATUS = {
   SIGNING_FAILED: 500,
   MISSING_PRIVATE_KEY: 500,
   INVALID_SIGNING_PROVIDER: 500,
+  LOAN_FAILED_COLLATERAL_RELEASED: 500,
+  LOAN_INVARIANT_VIOLATION: 500,
+  GOVERNANCE_BRIDGE_DISABLED: 500,
 } as const;
 
 export type ErrorCode = keyof typeof CODE_STATUS;
@@ -101,13 +118,16 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
 
   // Permission errors (403)
   IP_BLOCKED: "IP address is not in the allowed list",
+  DESTINATION_SCREENED: "Destination address is on the screening denylist",
   KYB_NOT_APPROVED: "Institution has not completed KYB approval",
   INSUFFICIENT_PERMISSIONS: "Insufficient permissions for this operation",
   FORBIDDEN_RESOURCE: "Access to this resource is forbidden",
+  WALLET_INSTITUTION_MISMATCH: "Wallets belong to different institutions",
 
   // Not found errors (404)
   INSTITUTION_NOT_FOUND: "Institution not found",
   WALLET_NOT_FOUND: "Wallet not found",
+  QUOTE_NOT_FOUND: "FX quote not found",
   LOAN_NOT_FOUND: "Loan not found",
   WEBHOOK_NOT_FOUND: "Webhook not found",
   FX_QUOTE_NOT_FOUND: "FX quote not found",
@@ -122,6 +142,11 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
   INSTITUTION_ALREADY_EXISTS: "Institution already exists",
   API_KEY_ALREADY_EXISTS: "API key already exists",
   INSTITUTION_SUSPENDED: "Institution is suspended and cannot perform this operation",
+  LOAN_ALREADY_ACTIVE: "This wallet already has an active loan",
+  QUOTE_ALREADY_USED: "This FX quote has already been used",
+  INSUFFICIENT_AVAILABLE_CREDIT: "Insufficient available credit for this draw",
+  INSTALLMENT_BATCH_TOO_LARGE: "Payment covers more than 5 installments — split into smaller batches",
+  EXCESS_PAYMENT: "Payment amount exceeds remaining installment balance",
   DATABASE_CONSTRAINT_VIOLATION: "Request conflicts with an existing record",
 
   // Gone errors (410)
@@ -136,10 +161,15 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
   INSUFFICIENT_BALANCE: "Insufficient balance for this operation",
   WALLET_SCREENING_FAILED: "Wallet failed risk screening",
   COLLATERAL_INSUFFICIENT: "Collateral is insufficient for this operation",
+  INSUFFICIENT_COLLATERAL: "Insufficient collateral balance for this loan",
+  COLLATERAL_RATIO_TOO_LOW: "Collateral-to-loan ratio is below the minimum threshold",
   LOAN_ALREADY_REPAID: "Loan has already been repaid",
   INVALID_ASSET_ID: "Invalid asset ID",
   WALLET_REQUIRED: "Institution does not have a primary wallet. Call POST /v1/accounts/:id/wallets first.",
+  DESTINATION_NOT_OPTED_IN: "Destination address is not opted into this asset",
+  INVALID_DESTINATION_ADDRESS: "Destination address is not a valid Algorand address",
   UNSUPPORTED_ASSET: "Asset ID is not supported for this operation",
+  UNSUPPORTED_ASSET_PAIR: "This asset pair is not supported for FX swaps",
   WALLET_NOT_OPTED_IN: "Wallet has not opted into the required LP token",
   INSUFFICIENT_POSITION_BALANCE: "Insufficient position balance for withdrawal",
   POSITION_BALANCE_MISMATCH: "DB and on-chain position balances disagree",
@@ -162,6 +192,7 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
   RANGE_ERROR: "Range service returned an error",
   HAPI_ERROR: "HAPI service returned an error",
   EXTERNAL_SERVICE_ERROR: "External service returned an error",
+  VAULT_CREATION_FAILED: "Failed to create collateral vault entry on-chain",
 
   // Internal errors (500)
   INTERNAL_ERROR: "An unexpected error occurred",
@@ -170,6 +201,9 @@ const CODE_DETAIL: Record<ErrorCode, string> = {
   SIGNING_FAILED: "Transaction signing failed",
   MISSING_PRIVATE_KEY: "Wallet has no private key stored",
   INVALID_SIGNING_PROVIDER: "Wallet uses a different signing provider",
+  LOAN_FAILED_COLLATERAL_RELEASED: "Loan origination failed and collateral has been released",
+  LOAN_INVARIANT_VIOLATION: "Internal invariant violated — loan collateral state inconsistent",
+  GOVERNANCE_BRIDGE_DISABLED: "Governance bridge is disabled — set GOVERNANCE_BRIDGE_ENABLED=true",
 };
 
 export class ApiError extends Error {

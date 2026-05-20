@@ -66,7 +66,7 @@ vi.mock("../db/index.js", () => ({
             algorandAddress: "4NMEIQMH7QOBJG32PSGZWXZUJESXIQPEWJFTZGNJJMFGGL3CK4VZUCXOA",
             label: "Primary Wallet",
             isPrimary: true,
-            optedInAssets: [758916950, 762580194],
+            optedInAssets: [758916950, 762889282],
             createdAt: new Date("2026-05-18T12:00:00.000Z"),
           }]),
         }) 
@@ -209,7 +209,7 @@ const WALLET_ROW = {
   id: "wallet-db-id", institutionId: INSTITUTION_ID, label: "Primary Wallet",
   isPrimary: true, turnkeyWalletId: TURNKEY_WALLET_ID,
   turnkeyAddress: TURNKEY_ADDRESS, algorandAddress: ALGORAND_ADDRESS,
-  optedInAssets: [758916950, 762580194],
+  optedInAssets: [758916950, 762889282],
   status: "active",
   createdAt: new Date("2026-05-18T12:00:00Z"), updatedAt: new Date("2026-05-18T12:00:00Z"),
 };
@@ -434,9 +434,9 @@ describe("POST /v1/accounts/:id/wallets", () => {
     expect(res.statusCode).toBe(201);
     const body = res.json();
     // Response must include optedInAssets with both TEST_USDC and senior LP token
-    expect(body.optedInAssets).toEqual([758916950, 762580194]);
+    expect(body.optedInAssets).toEqual([758916950, 762889282]);
 
-    // signTransaction called once per asset: TEST_USDC (758916950) + senior LP (762580194) = 2 calls
+    // signTransaction called once per asset: TEST_USDC (758916950) + senior LP (762889282) = 2 calls
     expect(provider.signTransaction).toHaveBeenCalledTimes(2);
 
     // submitSignedTransaction called once per opt-in
@@ -461,7 +461,7 @@ describe("POST /v1/accounts/:id/wallets", () => {
     const body = res.json();
     // Asset still recorded as opted-in (we know it is, just not from this txn)
     // Senior LP token opt-in also succeeds
-    expect(body.optedInAssets).toEqual([758916950, 762580194]);
+    expect(body.optedInAssets).toEqual([758916950, 762889282]);
     await app.close();
   });
 });

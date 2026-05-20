@@ -54,3 +54,91 @@ export const withdrawalConfirmationQueue = new Queue("withdrawal-confirmation", 
     removeOnFail: false,
   },
 });
+
+// Loan Origination Step 1 Queue — locks collateral in Vault, then calls LoanFactory.originate_overcollateralized
+export const loanOriginationStep1Queue = new Queue("loan-origination-step-1", {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});
+
+// Loan Origination Confirmation Queue — confirms step 2 txn, marks loan active
+export const loanOriginationConfirmQueue = new Queue("loan-origination-confirm", {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 10,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});
+
+// Vault Release Compensator Queue — releases collateral if step 2 fails
+export const vaultReleaseCompensatorQueue = new Queue("vault-release-compensator", {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: { type: "exponential", delay: 3000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});
+
+// Loan Draw Queue — processes draws against a revolving credit line
+export const loanDrawQueue = new Queue("loan-draw", {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});
+
+// Loan Repay Queue — processes repayments via LoanFactory.repay() atomic group
+export const loanRepayQueue = new Queue("loan-repay", {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});
+
+// REVOLVING Origination Queue — calls LoanFactory.originate_revolving, captures onchain_loan_id
+export const revolvingOriginationQueue = new Queue("revolving-origination", {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});
+
+// TERM Origination Queue — calls LoanFactory.originate_term, captures onchain_loan_id
+export const termOriginationQueue = new Queue("term-origination", {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});
+
+// INSTALLMENT Origination Queue
+export const installmentOriginationQueue = new Queue("installment-origination", {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2000 },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});

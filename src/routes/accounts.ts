@@ -481,7 +481,7 @@ export async function accountsRoutes(app: FastifyInstance) {
     // Opt wallet into required ASAs
     const ASSETS_TO_OPT_IN = [
       parseInt(process.env.TEST_USDC_ASSET_ID ?? "758916950"),
-      parseInt(process.env.LENDING_POOL_V2_USDC_SENIOR_LP_TOKEN ?? "762580194"),
+      parseInt(process.env.LENDING_POOL_V2_USDC_SENIOR_LP_TOKEN ?? "762889282"),
     ];
 
     const optedInAssets: number[] = [];

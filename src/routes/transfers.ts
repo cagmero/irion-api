@@ -1,8 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import algosdk from "algosdk";
 import { db } from "../db/index.js";
-import { institutions, wallets, deposits, auditLog, lendingPositions } from "../db/schema.js";
-import { eq, and, sql } from "drizzle-orm";
+import { institutions, wallets, deposits, transfers, auditLog, lendingPositions } from "../db/schema.js";
+import { eq, and } from "drizzle-orm";
 import { algorandService } from "../services/algorand.js";
 import { depositConfirmationQueue } from "../queues/index.js";
 import { ApiError } from "../lib/errors.js";
@@ -25,7 +25,7 @@ const CIRCLE_USDC_MAINNET_ASSET_ID  = 31566704;
 
 const SUPPORTED_DEPOSIT_ASSETS: Record<number, { poolAppId: number; poolAddress: string; tranche: number }> = {
   758916950: {   // TEST_USDC (Irion Test USDC, mock) — pool_asset_id in LendingPool V2
-    poolAppId:   parseInt(process.env.LENDING_POOL_V2_USDC_APP_ID  ?? "762580175"),
+    poolAppId:   parseInt(process.env.LENDING_POOL_V2_USDC_APP_ID  ?? "762889263"),
     poolAddress: process.env.LENDING_POOL_V2_USDC_ADDRESS          ?? "Y2KX4ZSQSFLW27EAE5VORM4DAY2S4EWZ24NKPLRMNHJMUXTNXNM2R6OQYM",
     tranche: 0,  // TRANCHE_SENIOR
   },
@@ -172,7 +172,7 @@ export async function transfersRoutes(app: FastifyInstance) {
         sender: wallet.algorandAddress,
         appIndex: poolConfig.poolAppId,
         appArgs: [methodSelector, trancheArg],
-        foreignAssets: [assetId, parseInt(process.env.LENDING_POOL_V2_USDC_SENIOR_LP_TOKEN ?? "762580194")],
+        foreignAssets: [assetId, parseInt(process.env.LENDING_POOL_V2_USDC_SENIOR_LP_TOKEN ?? "762889282")],
         boxes: [{ appIndex: poolConfig.poolAppId, name: boxName }],
         suggestedParams: applParams,
       });
@@ -251,56 +251,92 @@ export async function transfersRoutes(app: FastifyInstance) {
   });
 
   app.post("/transfers", {
+    preHandler: [async (request: FastifyRequest, reply: FastifyReply) => {
+      await (request.server as any).authenticate(request, reply);
+    }],
     schema: {
       body: {
         type: "object",
-        required: ["type", "assetId", "amount", "destinationAddress"],
+        required: ["fromWalletId", "toWalletId", "assetId", "amount"],
         properties: {
-          type: { type: "string", enum: ["internal", "onchain", "fx"] },
+          fromWalletId: { type: "string", format: "uuid" },
+          toWalletId: { type: "string", format: "uuid" },
           assetId: { type: "integer", minimum: 0 },
           amount: { type: "string", pattern: "^[0-9]+$" },
-          destinationAddress: { type: "string", maxLength: 255 },
+          memo: { type: "string", maxLength: 255 },
           clientRequestId: { type: "string", maxLength: 255 },
-          fxQuoteId: { type: "string", format: "uuid" },
         },
       },
       response: {
-        200: {
+        202: {
           type: "object",
           properties: {
-            transferId: { type: "string" },
+            id: { type: "string" },
+            txHash: { type: "string" },
+            explorerUrl: { type: "string" },
             status: { type: "string" },
           },
         },
       },
     },
-  }, async (request: FastifyRequest) => {
-    const body = request.body as TransferBody;
-    return { transferId: "mock-transfer-id", status: "pending" };
-  });
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const institutionId = request.institutionId;
+    const { fromWalletId, toWalletId, assetId, amount: amountStr, memo, clientRequestId } = request.body as any;
+    const amountN = BigInt(amountStr);
+    if (amountN <= 0n) throw new ApiError("VALIDATION_FAILED", "Amount must be > 0");
 
-  app.post("/payouts", {
-    schema: {
-      body: {
-        type: "object",
-        required: ["amount"],
-        properties: {
-          amount: { type: "string", pattern: "^[0-9]+$" },
-          destinationBankDetails: { type: "string" },
-          clientRequestId: { type: "string", maxLength: 255 },
-        },
-      },
-      response: {
-        200: {
-          type: "object",
-          properties: {
-            payoutId: { type: "string" },
-            status: { type: "string" },
-          },
-        },
-      },
-    },
-  }, async (_request: FastifyRequest) => {
-    return { payoutId: "mock-payout-id", status: "pending" };
+    // Fetch both wallets
+    const [fromWallet] = await db.select().from(wallets).where(and(eq(wallets.id, fromWalletId), eq(wallets.institutionId, institutionId))).limit(1);
+    if (!fromWallet) throw new ApiError("WALLET_NOT_FOUND", "Source wallet not found");
+    const [toWallet] = await db.select().from(wallets).where(and(eq(wallets.id, toWalletId), eq(wallets.institutionId, institutionId))).limit(1);
+    if (!toWallet) throw new ApiError("WALLET_NOT_FOUND", "Destination wallet not found");
+    if (!fromWallet.algorandAddress || !toWallet.algorandAddress) throw new ApiError("WALLET_NOT_FOUND", "Wallet has no address");
+
+    // Check sufficient balance on-chain
+    const algodClient = algorandService.client.client.algod;
+    const fromInfo = await algodClient.accountInformation(fromWallet.algorandAddress).do();
+    const assets: any[] = fromInfo.assets ?? [];
+    const fromAsset = assets.find((a: any) => Number(a["asset-id"] ?? a.assetId) === assetId);
+    const fromBalance = fromAsset ? Number(fromAsset.amount ?? fromAsset["amount"] ?? 0) : 0;
+    if (fromBalance < Number(amountN)) throw new ApiError("INSUFFICIENT_BALANCE", `Balance ${fromBalance} < ${amountN}`);
+
+    // Check destination opted in
+    const toInfo = await algodClient.accountInformation(toWallet.algorandAddress).do();
+    const toAssets: any[] = toInfo.assets ?? [];
+    const optedIn = toAssets.some((a: any) => Number(a["asset-id"] ?? a.assetId) === assetId);
+    if (!optedIn) throw new ApiError("WALLET_NOT_OPTED_IN", "Destination not opted into asset");
+
+    // Memo length check
+    if (memo && Buffer.byteLength(memo, "utf-8") > 1000) throw new ApiError("VALIDATION_FAILED", "Memo too long (max 1000 bytes)");
+
+    // Create transfer row
+    const [transfer] = await db.insert(transfers).values({
+      institutionId, fromWalletId, toWalletId,
+      type: "onchain", assetId, amount: Number(amountN),
+      destinationAddress: toWallet.algorandAddress,
+      memo: memo ?? null, clientRequestId: clientRequestId ?? null,
+    }).returning();
+
+    // Submit on-chain
+    const signingProvider = getSigningProvider();
+    const suggestedParams = await algodClient.getTransactionParams().do();
+    const noteBytes = memo ? new TextEncoder().encode(memo) : undefined;
+    const axferTxn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+      sender: fromWallet.algorandAddress,
+      receiver: toWallet.algorandAddress,
+      assetIndex: assetId,
+      amount: amountN,
+      suggestedParams,
+      note: noteBytes,
+    });
+
+    const signed = await signingProvider.signTransaction(fromWalletId, algosdk.encodeUnsignedTransaction(axferTxn));
+    const txHash = await algorandService.submitSignedTransaction(signed);
+
+    await db.update(transfers).set({ status: "submitted", txHash }).where(eq(transfers.id, transfer.id));
+    await db.insert(auditLog).values({ institutionId, action: "transfer.submitted", details: { transferId: transfer.id, fromWalletId, toWalletId, amount: amountStr, txHash } });
+
+    const explorerUrl = `https://testnet.explorer.perawallet.app/tx/${txHash}`;
+    return reply.code(202).send({ id: transfer.id, txHash, explorerUrl, status: "submitted" });
   });
 }

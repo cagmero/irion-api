@@ -1,41 +1,65 @@
 {
-  "_comment": "Sample webhook payloads for deposit.confirmed and withdrawal.confirmed events — 2d.6 smoke test",
-  "_headers": {
-    "Content-Type": "application/json",
-    "Irion-Signature": "sha256=<64-char-hex-hmac>",
-    "Irion-Event": "<event-name>",
-    "Irion-Timestamp": "<ISO-8601-timestamp>"
-  },
-
-  "deposit_confirmed": {
-    "event": "deposit.confirmed",
-    "institutionId": "f82e3874-7b4c-42e8-a7c9-d0ca22692ac6",
-    "payload": {
-      "depositId": "a1d77139-c0bf-4b84-aaf4-88e56137d595",
-      "txHash": "OYDSQIQYMFPCDHYI2KPGN5A6F2FAF7A7LCSV2437DIO2SLHPGHWQ",
-      "amount": "1000000",
-      "assetId": 758916950,
-      "confirmedRound": 63542495
-    }
-  },
-
-  "withdrawal_confirmed": {
-    "event": "withdrawal.confirmed",
-    "institutionId": "f82e3874-7b4c-42e8-a7c9-d0ca22692ac6",
-    "payload": {
-      "withdrawalId": "1aa21905-22d6-4729-9ecd-2b30ca38639e",
-      "txHash": "LENZNOXFMQBZXZLQEX2I4MBOFMGLQIR4TE6HG35JNBB6URBNDGSQ",
-      "amount": "500000",
-      "assetId": 758916950,
-      "confirmedRound": 63542509
-    }
-  },
-
-  "_signature_verification": {
+  "_comment": "Sample webhook payloads — 2g signing format (t=<ts>,v1=<hex>)",
+  "_comment_last_verified": "2026-05-20",
+  "_signature_format": {
     "algorithm": "HMAC-SHA256",
-    "input": "JSON.stringify(payload) — the entire request body",
-    "key": "institution.hmac_secret (one-time, returned at account creation)",
-    "header": "Irion-Signature: <64-char-hex-hmac>",
-    "note": "The worker enqueues to webhookDeliveryQueue which signs and delivers asynchronously"
+    "input": "'{timestamp}.{JSON.stringify(body)}' — body is { event, institutionId, payload }",
+    "key": "per-webhook secret (returned once at POST /v1/webhooks, rotatable)",
+    "header": "Irion-Signature: t=<unix_ts>,v1=<64-char-hex>",
+    "header_grace_period": "Irion-Signature: t=<unix_ts>,v1=<new_key_hex>,v0=<old_key_hex>",
+    "additional_headers": {
+      "Idempotency-Key": "<delivery-uuid> — receiver can deduplicate",
+      "Irion-Event": "deposit.confirmed | withdrawal.confirmed | loan.originated | ...",
+      "Irion-Timestamp": "<ISO-8601> — UTC timestamp of delivery attempt"
+    },
+    "replay_protection": "Receiver verifies timestamp within ±5 minutes of its clock",
+    "note": "The worker enqueues to webhookDeliveryQueue which signs (deliveryId as Idempotency-Key) and delivers asynchronously"
+  },
+  "events": {
+    "deposit_confirmed": {
+      "event": "deposit.confirmed",
+      "institutionId": "f82e3874-7b4c-42e8-a7c9-d0ca22692ac6",
+      "payload": {
+        "depositId": "a1d77139-c0bf-4b84-aaf4-88e56137d595",
+        "txHash": "OYDSQIQYMFPCDHYI2KPGN5A6F2FAF7A7LCSV2437DIO2SLHPGHWQ",
+        "amount": "1000000",
+        "assetId": 758916950,
+        "confirmedRound": 63542495
+      }
+    },
+    "withdrawal_confirmed": {
+      "event": "withdrawal.confirmed",
+      "institutionId": "f82e3874-7b4c-42e8-a7c9-d0ca22692ac6",
+      "payload": {
+        "withdrawalId": "1aa21905-22d6-4729-9ecd-2b30ca38639e",
+        "txHash": "LENZNOXFMQBZXZLQEX2I4MBOFMGLQIR4TE6HG35JNBB6URBNDGSQ",
+        "amount": "500000",
+        "assetId": 758916950,
+        "confirmedRound": 63542509
+      }
+    },
+    "loan_originated": {
+      "event": "loan.originated",
+      "institutionId": "28823893-0bef-4410-858f-5de9b2462fac",
+      "payload": {
+        "loanId": "e8c1a8ac-3ec3-49a9-9938-d75fa1fe9f54",
+        "txHash": "NMCNK7XOYF4AQ3DNP3EQCLR2LIUGXJSJM726RPK2UWMJHJAADGLQ",
+        "amount": "1000000",
+        "assetId": 758916950,
+        "confirmedRound": 63544772
+      }
+    },
+    "fx_executed": {
+      "event": "fx.executed",
+      "institutionId": "6f3e3995-b998-4abb-b302-f798043b4efb",
+      "payload": {
+        "transferId": "a814a72e-a2ca-4c7e-9dec-623ffc7184de",
+        "quoteId": "624cdf15-dc57-46f5-b39a-44b8e96f73a6",
+        "fromAmount": "1000000",
+        "toAmount": "3976036",
+        "fromAssetId": 758916950,
+        "toAssetId": 0
+      }
+    }
   }
 }

@@ -26,8 +26,8 @@ import algosdk from "algosdk";
 const BASE       = process.env.API_BASE_URL ?? "http://localhost:4000";
 const ADMIN_KEY  = process.env.ADMIN_API_KEY!;
 const TEST_USDC_ID = parseInt(process.env.TEST_USDC_ASSET_ID                     ?? "758916950");
-const SENIOR_LP  = parseInt(process.env.LENDING_POOL_V2_USDC_SENIOR_LP_TOKEN ?? "762580194");
-const POOL_APP   = parseInt(process.env.LENDING_POOL_V2_USDC_APP_ID          ?? "762580175");
+const SENIOR_LP  = parseInt(process.env.LENDING_POOL_V2_USDC_SENIOR_LP_TOKEN ?? "762889282");
+const POOL_APP   = parseInt(process.env.LENDING_POOL_V2_USDC_APP_ID          ?? "762889263");
 const POOL_ADDR  = process.env.LENDING_POOL_V2_USDC_ADDRESS                  ?? "Y2KX4ZSQSFLW27EAE5VORM4DAY2S4EWZ24NKPLRMNHJMUXTNXNM2R6OQYM";
 const DEPOSIT_AMT = 1_000_000; // 1 TEST_USDC (6 decimals)
 

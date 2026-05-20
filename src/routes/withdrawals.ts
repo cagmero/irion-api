@@ -25,11 +25,11 @@ import { ApiError } from "../lib/errors.js";
 import { getSigningProvider } from "../services/signing/index.js";
 
 // Pool configuration — mirrors deposits route
-const POOL_APP_ID   = parseInt(process.env.LENDING_POOL_V2_USDC_APP_ID  ?? "762580175");
+const POOL_APP_ID   = parseInt(process.env.LENDING_POOL_V2_USDC_APP_ID  ?? "762889263");
 const POOL_ADDRESS  = process.env.LENDING_POOL_V2_USDC_ADDRESS          ?? "Y2KX4ZSQSFLW27EAE5VORM4DAY2S4EWZ24NKPLRMNHJMUXTNXNM2R6OQYM";
 const TRANCHE       = 0; // TRANCHE_SENIOR
 const TEST_USDC_ASSET_ID = 758916950;
-const SENIOR_LP_TOKEN_ID = parseInt(process.env.LENDING_POOL_V2_USDC_SENIOR_LP_TOKEN ?? "762580194");
+const SENIOR_LP_TOKEN_ID = parseInt(process.env.LENDING_POOL_V2_USDC_SENIOR_LP_TOKEN ?? "762889282");
 
 const SUPPORTED_WITHDRAWAL_ASSETS: number[] = [TEST_USDC_ASSET_ID];
 

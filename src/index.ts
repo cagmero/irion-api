@@ -11,6 +11,15 @@
 import { buildApp } from "./app";
 import { startDepositConfirmationWorker } from "./queues/processors/deposit-confirmation.js";
 import { startWithdrawalConfirmationWorker } from "./queues/processors/withdrawal-confirmation.js";
+import { startLoanOriginationStep1Worker } from "./queues/processors/loan-origination-step-1.js";
+import { startLoanOriginationConfirmWorker } from "./queues/processors/loan-origination-confirmation.js";
+import { startVaultReleaseCompensatorWorker } from "./queues/processors/vault-release-compensator.js";
+import { startLoanDrawWorker } from "./queues/processors/loan-draw.js";
+import { startLoanRepayWorker } from "./queues/processors/loan-repay.js";
+import { startRevolvingOriginationWorker } from "./queues/processors/revolving-origination.js";
+import { startTermOriginationWorker } from "./queues/processors/term-origination.js";
+import { startInstallmentOriginationWorker } from "./queues/processors/installment-origination.js";
+import { startWebhookDeliveryWorker } from "./queues/processors/webhook-delivery.js";
 
 async function start() {
   const app = await buildApp();
@@ -19,6 +28,15 @@ async function start() {
     console.log("⚙️  Starting inline workers...");
     startDepositConfirmationWorker();
     startWithdrawalConfirmationWorker();
+    startLoanOriginationStep1Worker();
+    startLoanOriginationConfirmWorker();
+    startVaultReleaseCompensatorWorker();
+    startLoanDrawWorker();
+    startLoanRepayWorker();
+    startRevolvingOriginationWorker();
+    startTermOriginationWorker();
+    startInstallmentOriginationWorker();
+    startWebhookDeliveryWorker();
   }
 
   try {

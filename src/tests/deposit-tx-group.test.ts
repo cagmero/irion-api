@@ -9,15 +9,15 @@ import algosdk from "algosdk";
  *
  * These tests catch the box-reference bug that caused:
  *   "logic eval error: invalid Box reference 0x..."
- *   "unavailable Asset 762580194"
+ *   "unavailable Asset 762889282"
  */
 
 describe("Deposit transaction group construction", () => {
   const WALLET_ADDR = "IWSSVZLAE5EIXWVRXCUPI5NODWAF3O5JSV5DXKGNUIAEZSUAKAW2VXFXCU";
   const POOL_ADDR = "Y2KX4ZSQSFLW27EAE5VORM4DAY2S4EWZ24NKPLRMNHJMUXTNXNM2R6OQYM";
-  const POOL_APP_ID = 762580175;
+  const POOL_APP_ID = 762889263;
   const TEST_USDC_ID = 758916950;
-  const SENIOR_LP_ID = 762580194;
+  const SENIOR_LP_ID = 762889282;
   const DEPOSIT_AMOUNT = 1_000_000n;
 
   const sp = {

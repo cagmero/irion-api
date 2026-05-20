@@ -17,16 +17,10 @@ import {
 import { sql } from "drizzle-orm";
 
 // ── PRECISION NOTE ────────────────────────────────────────────────────────────
-// All financial amount columns (balance, accrued_yield, accrued_interest,
-// principal_amount, outstanding_balance, collateral_amount, amount, from_amount,
-// to_amount) use bigint({ mode: "number" }). Drizzle returns these as JS `number`
-// (IEEE-754 float64), which loses integer precision above MAX_SAFE_INTEGER
-// (2^53 - 1 ≈ 9,007,199,254,740,991 microunits ≈ 9 billion USDC).
-//
-// For MVP balances this ceiling is acceptable. Before any production deploy with
-// balances that could approach this ceiling, migrate all financial columns to
-// mode: "bigint" and update all route handlers to handle JS BigInt.
-// See DEFERRED.md "BigInt Precision in Position/Loan Amounts".
+// All financial amount columns use bigint({ mode: "bigint" }) — Drizzle returns
+// these as JS `bigint`, which preserves integer precision up to 2^63-1 (the int8
+// max). Route handlers serialize amounts as strings for JSON transport.
+// Migration completed in Phase 2h.2a.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Custom type for bytea (used for pgcrypto)
@@ -49,7 +43,7 @@ export const kybStatusEnum = pgEnum("kyb_status_enum", ["initiated", "approved",
 export const walletStatusEnum = pgEnum("wallet_status_enum", ["active", "inactive"]);
 export const transactionStatusEnum = pgEnum("transaction_status_enum", ["pending", "submitted", "completed", "failed"]);
 export const loanTypeEnum = pgEnum("loan_type_enum", ["installment", "revolving", "term", "overcollateralized"]);
-export const loanStatusEnum = pgEnum("loan_status_enum", ["pending", "active", "overdue", "repaid", "defaulted", "liquidated"]);
+export const loanStatusEnum = pgEnum("loan_status_enum", ["pending", "submitted", "collateral_locked", "active", "overdue", "repaid", "defaulted", "liquidated", "failed_compensating", "failed_released"]);
 export const transferTypeEnum = pgEnum("transfer_type_enum", ["internal", "onchain", "fx"]);
 export const webhookDeliveryStatusEnum = pgEnum("webhook_delivery_status_enum", ["pending", "delivered", "failed"]);
 
@@ -164,7 +158,7 @@ export const deposits = pgTable(
       .references(() => institutions.id),
     clientRequestId: varchar("client_request_id", { length: 255 }),
     assetId: integer("asset_id").notNull(),
-    amount: bigint("amount", { mode: "number" }).notNull(), // PRECISION
+    amount: bigint("amount", { mode: "bigint" }).notNull(), // PRECISION
     status: transactionStatusEnum("status").notNull().default("pending"),
     txHash: varchar("tx_hash", { length: 255 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -186,7 +180,7 @@ export const withdrawals = pgTable(
       .references(() => institutions.id),
     clientRequestId: varchar("client_request_id", { length: 255 }),
     assetId: integer("asset_id").notNull(),
-    amount: bigint("amount", { mode: "number" }).notNull(), // PRECISION
+    amount: bigint("amount", { mode: "bigint" }).notNull(), // PRECISION
     status: transactionStatusEnum("status").notNull().default("pending"),
     txHash: varchar("tx_hash", { length: 255 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -207,8 +201,8 @@ export const lendingPositions = pgTable(
       .notNull()
       .references(() => institutions.id),
     assetId: integer("asset_id").notNull(),
-    balance: bigint("balance", { mode: "number" }).notNull().default(0), // PRECISION — lp_token_balance
-    accruedYield: bigint("accrued_yield", { mode: "number" }).notNull().default(0), // PRECISION
+    balance: bigint("balance", { mode: "bigint" }).notNull().default(0), // PRECISION — lp_token_balance
+    accruedYield: bigint("accrued_yield", { mode: "bigint" }).notNull().default(0), // PRECISION
     lastAccrualAt: timestamp("last_accrual_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -227,8 +221,8 @@ export const borrowingPositions = pgTable(
       .notNull()
       .references(() => institutions.id),
     assetId: integer("asset_id").notNull(),
-    balance: bigint("balance", { mode: "number" }).notNull().default(0), // PRECISION — outstanding_borrow_balance
-    accruedInterest: bigint("accrued_interest", { mode: "number" }).notNull().default(0), // PRECISION
+    balance: bigint("balance", { mode: "bigint" }).notNull().default(0), // PRECISION — outstanding_borrow_balance
+    accruedInterest: bigint("accrued_interest", { mode: "bigint" }).notNull().default(0), // PRECISION
     lastAccrualAt: timestamp("last_accrual_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -246,21 +240,34 @@ export const loans = pgTable(
     institutionId: uuid("institution_id")
       .notNull()
       .references(() => institutions.id),
+    walletId: uuid("wallet_id")
+      .references(() => wallets.id),
     clientRequestId: varchar("client_request_id", { length: 255 }),
     type: loanTypeEnum("type").notNull(),
     status: loanStatusEnum("status").notNull().default("pending"),
     assetId: integer("asset_id").notNull(),
-    principalAmount: bigint("principal_amount", { mode: "number" }).notNull(), // PRECISION
-    borrowedAmount: bigint("borrowed_amount", { mode: "number" }).notNull().default(0), // PRECISION
-    outstandingBalance: bigint("outstanding_balance", { mode: "number" }).notNull().default(0), // PRECISION
+    principalAmount: bigint("principal_amount", { mode: "bigint" }).notNull(), // PRECISION
+    borrowedAmount: bigint("borrowed_amount", { mode: "bigint" }).notNull().default(0), // PRECISION
+    outstandingBalance: bigint("outstanding_balance", { mode: "bigint" }).notNull().default(0), // PRECISION
     collateralAssetId: integer("collateral_asset_id"),
-    collateralAmount: bigint("collateral_amount", { mode: "number" }), // PRECISION
+    collateralAmount: bigint("collateral_amount", { mode: "bigint" }), // PRECISION
+    collateralRatioBps: integer("collateral_ratio_bps"),
+    creditLimit: bigint("credit_limit", { mode: "bigint" }),
+    drawnAmount: bigint("drawn_amount", { mode: "bigint" }).notNull().default(0),
+    accruedInterest: bigint("accrued_interest", { mode: "bigint" }).notNull().default(0),
+    lateFeeBps: integer("late_fee_bps"),
+    lateFeeApplied: boolean("late_fee_applied").notNull().default(false),
     interestRateBps: integer("interest_rate_bps").notNull(),
     ltvRatioBps: integer("ltv_ratio_bps"),
     termDays: integer("term_days"),
     installmentCount: integer("installment_count"),
     installmentsPaid: integer("installments_paid").default(0),
-    onchainLoanId: bigint("onchain_loan_id", { mode: "number" }), // PRECISION
+    installmentIntervalRounds: integer("installment_interval_rounds"),
+    onchainLoanId: bigint("onchain_loan_id", { mode: "bigint" }), // PRECISION
+    maturityRound: bigint("maturity_round", { mode: "bigint" }),
+    txHash: varchar("tx_hash", { length: 255 }),
+    vaultId: integer("vault_id"),
+    releaseTxHash: varchar("release_tx_hash", { length: 255 }),
     nextPaymentDueAt: timestamp("next_payment_due_at"),
     originatedAt: timestamp("originated_at"),
     maturesAt: timestamp("matures_at"),
@@ -286,7 +293,7 @@ export const loanDraws = pgTable(
       .notNull()
       .references(() => loans.id),
     clientRequestId: varchar("client_request_id", { length: 255 }),
-    amount: bigint("amount", { mode: "number" }).notNull(), // PRECISION
+    amount: bigint("amount", { mode: "bigint" }).notNull(), // PRECISION
     status: transactionStatusEnum("status").notNull().default("pending"),
     txHash: varchar("tx_hash", { length: 255 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -307,7 +314,7 @@ export const loanRepayments = pgTable(
       .notNull()
       .references(() => loans.id),
     clientRequestId: varchar("client_request_id", { length: 255 }),
-    amount: bigint("amount", { mode: "number" }).notNull(), // PRECISION
+    amount: bigint("amount", { mode: "bigint" }).notNull(), // PRECISION
     status: transactionStatusEnum("status").notNull().default("pending"),
     txHash: varchar("tx_hash", { length: 255 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -316,6 +323,31 @@ export const loanRepayments = pgTable(
   (table) => ({
     loanIdx: index("idx_loan_repayments_loan").on(table.loanId),
     txHashIdx: index("idx_loan_repayments_tx_hash").on(table.txHash),
+  })
+);
+
+// 13. installments
+export const installments = pgTable(
+  "installments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    loanId: uuid("loan_id")
+      .notNull()
+      .references(() => loans.id),
+    installmentIndex: integer("installment_index").notNull(),
+    dueRound: bigint("due_round", { mode: "bigint" }).notNull(),
+    principalPortion: bigint("principal_portion", { mode: "bigint" }).notNull(),
+    interestPortion: bigint("interest_portion", { mode: "bigint" }).notNull(),
+    totalAmount: bigint("total_amount", { mode: "bigint" }).notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("pending"),
+    amountPaid: bigint("amount_paid", { mode: "bigint" }).notNull().default(0),
+    paidAtRound: bigint("paid_at_round", { mode: "bigint" }),
+    txHash: varchar("tx_hash", { length: 255 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    loanIndexIdx: index("idx_installments_loan_index").on(table.loanId, table.installmentIndex),
+    uniqueLoanInst: uniqueIndex("idx_installments_loan_installment").on(table.loanId, table.installmentIndex),
   })
 );
 
@@ -329,9 +361,13 @@ export const fxQuotes = pgTable(
       .references(() => institutions.id),
     fromAssetId: integer("from_asset_id").notNull(),
     toAssetId: integer("to_asset_id").notNull(),
-    fromAmount: bigint("from_amount", { mode: "number" }).notNull(), // PRECISION
-    toAmount: bigint("to_amount", { mode: "number" }).notNull(), // PRECISION
+    fromAmount: bigint("from_amount", { mode: "bigint" }).notNull(), // PRECISION
+    toAmount: bigint("to_amount", { mode: "bigint" }).notNull(), // PRECISION
     exchangeRate: decimal("exchange_rate", { precision: 20, scale: 6 }).notNull(),
+    walletId: uuid("wallet_id").references(() => wallets.id),
+    used: boolean("used").notNull().default(false),
+    priceImpactBps: integer("price_impact_bps"),
+    feeAmount: bigint("fee_amount", { mode: "bigint" }),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -350,10 +386,13 @@ export const transfers = pgTable(
       .notNull()
       .references(() => institutions.id),
     clientRequestId: varchar("client_request_id", { length: 255 }),
+    fromWalletId: uuid("from_wallet_id").references(() => wallets.id),
+    toWalletId: uuid("to_wallet_id").references(() => wallets.id),
     type: transferTypeEnum("type").notNull(),
     assetId: integer("asset_id").notNull(),
-    amount: bigint("amount", { mode: "number" }).notNull(), // PRECISION
+    amount: bigint("amount", { mode: "bigint" }).notNull(), // PRECISION
     destinationAddress: varchar("destination_address", { length: 255 }).notNull(),
+    memo: varchar("memo", { length: 255 }),
     status: transactionStatusEnum("status").notNull().default("pending"),
     txHash: varchar("tx_hash", { length: 255 }),
     fxQuoteId: uuid("fx_quote_id").references(() => fxQuotes.id),
@@ -375,7 +414,7 @@ export const payouts = pgTable(
       .notNull()
       .references(() => institutions.id),
     clientRequestId: varchar("client_request_id", { length: 255 }),
-    amount: bigint("amount", { mode: "number" }).notNull(), // PRECISION
+    amount: bigint("amount", { mode: "bigint" }).notNull(), // PRECISION
     destinationBankDetails: bytea("destination_bank_details").notNull(), // encrypted
     status: transactionStatusEnum("status").notNull().default("pending"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -396,8 +435,13 @@ export const webhooks = pgTable(
       .references(() => institutions.id),
     url: varchar("url", { length: 1024 }).notNull(),
     secret: bytea("secret").notNull(), // encrypted
+    previousSecret: bytea("previous_secret"), // encrypted previous secret (rotation grace)
+    previousSecretVersion: integer("previous_secret_version"),
+    gracePeriodEndsAt: timestamp("grace_period_ends_at"),
     events: text("events").array().notNull(),
+    description: varchar("description", { length: 255 }),
     isActive: boolean("is_active").notNull().default(true),
+    signingKeyVersion: integer("signing_key_version").notNull().default(1),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -418,6 +462,9 @@ export const webhookDeliveries = pgTable(
     payload: jsonb("payload").notNull(),
     status: webhookDeliveryStatusEnum("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
+    lastError: varchar("last_error", { length: 1024 }),
+    dlqAt: timestamp("dlq_at"),
+    nextRetryAt: timestamp("next_retry_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

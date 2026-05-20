@@ -99,7 +99,7 @@ vi.mock("../services/algorand.js", () => ({
             do: vi.fn().mockResolvedValue({ genesisID: "testnet-v1.0", genesisHash: new Uint8Array(32).fill(1), firstValid: 1000, lastValid: 2000, minFee: 1000, fee: 0 }),
           }),
           accountInformation: vi.fn().mockReturnValue({
-            do: vi.fn().mockResolvedValue({ assets: [{ "asset-id": 762580194, amount: 1000000 }] }),
+            do: vi.fn().mockResolvedValue({ assets: [{ "asset-id": 762889282, amount: 1000000 }] }),
           }),
           pendingTransactionInformation: vi.fn().mockReturnValue({
             do: vi.fn().mockResolvedValue({}),
@@ -410,7 +410,7 @@ describe("POST /v1/withdrawals", () => {
 
     const { algorandService } = await import("../services/algorand.js");
     (algorandService.client.client.algod as any).accountInformation = vi.fn().mockReturnValue({
-      do: vi.fn().mockResolvedValue({ assets: [{ "asset-id": 762580194, amount: 1000000 }] }),
+      do: vi.fn().mockResolvedValue({ assets: [{ "asset-id": 762889282, amount: 1000000 }] }),
     });
 
     const token = await makeTestToken(INSTITUTION_ID);
